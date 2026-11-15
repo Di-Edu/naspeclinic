@@ -1,14 +1,18 @@
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
+import { eq } from 'drizzle-orm';
 import type { Rol } from '@naspeclinic/shared';
 import { config } from '../config';
 import { HttpError } from '../lib/errores';
+import type { DB } from '../db';
+import { usuarios } from '../db/schema';
 
 export interface Sesion {
   id: number;
   rol: Rol;
   empresaId: number | null;
   nombre: string;
+  debeCambiarPassword: boolean;
 }
 
 declare global {
@@ -20,20 +24,43 @@ declare global {
   }
 }
 
-export function firmarToken(s: Sesion): string {
-  return jwt.sign(s, config.jwtSecret, { expiresIn: config.jwtExpira });
+interface Carga { id: number; pv: number }
+
+/** El token solo lleva el id y la versión de contraseña; rol y empresa se leen siempre de la BD. */
+export function firmarToken(id: number, versionPassword: number): string {
+  const carga: Carga = { id, pv: versionPassword };
+  return jwt.sign(carga, config.jwtSecret, { expiresIn: config.jwtExpira });
 }
 
-export function requiereAuth(req: Request, _res: Response, next: NextFunction) {
-  const h = req.headers.authorization;
-  if (!h?.startsWith('Bearer ')) return next(new HttpError(401, 'No autenticado'));
-  try {
-    const p = jwt.verify(h.slice(7), config.jwtSecret) as Sesion;
-    req.usuario = { id: p.id, rol: p.rol, empresaId: p.empresaId, nombre: p.nombre };
-    next();
-  } catch {
-    next(new HttpError(401, 'Sesión expirada o inválida'));
-  }
+/** Rutas que se pueden usar aunque falte cambiar la contraseña inicial. */
+const PERMITIDAS_SIN_CAMBIO = ['/api/auth/me', '/api/auth/cambiar-password'];
+
+/**
+ * Valida el JWT y vuelve a leer al usuario: si fue desactivado o cambió su contraseña
+ * después de emitido el token, la sesión deja de servir de inmediato.
+ */
+export function crearRequiereAuth(db: DB): RequestHandler {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    const h = req.headers.authorization;
+    if (!h?.startsWith('Bearer ')) return next(new HttpError(401, 'No autenticado'));
+    let carga: Carga;
+    try {
+      carga = jwt.verify(h.slice(7), config.jwtSecret) as Carga;
+    } catch {
+      return next(new HttpError(401, 'Sesión expirada o inválida'));
+    }
+    try {
+      const [u] = await db.select().from(usuarios).where(eq(usuarios.id, carga.id));
+      if (!u || !u.activo || u.versionPassword !== carga.pv) return next(new HttpError(401, 'Sesión expirada o inválida'));
+      req.usuario = { id: u.id, rol: u.rol, empresaId: u.empresaId, nombre: u.nombre, debeCambiarPassword: u.debeCambiarPassword };
+      if (u.debeCambiarPassword && !PERMITIDAS_SIN_CAMBIO.includes(req.originalUrl.split('?')[0])) {
+        return next(new HttpError(403, 'Debe cambiar su contraseña antes de continuar'));
+      }
+      next();
+    } catch (e) {
+      next(e);
+    }
+  };
 }
 
 export const requiereRol = (...roles: Rol[]) => (req: Request, _res: Response, next: NextFunction) => {

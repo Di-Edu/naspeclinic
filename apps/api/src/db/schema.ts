@@ -36,6 +36,20 @@ export const usuarios = pgTable('usuarios', {
   activo: boolean('activo').default(true).notNull(),
   intentosFallidos: integer('intentos_fallidos').default(0).notNull(),
   bloqueadoHasta: timestamp('bloqueado_hasta', { withTimezone: true }),
+  /** true cuando la contraseña la asignó un admin: se exige cambiarla al entrar */
+  debeCambiarPassword: boolean('debe_cambiar_password').default(false).notNull(),
+  /** Sube con cada cambio de contraseña; invalida las sesiones (JWT) anteriores */
+  versionPassword: integer('version_password').default(1).notNull(),
+  creadoEn: creado(),
+});
+
+/** Enlaces de un solo uso para restablecer la contraseña (se guarda solo el hash). */
+export const tokensRecuperacion = pgTable('tokens_recuperacion', {
+  id: serial('id').primaryKey(),
+  usuarioId: integer('usuario_id').notNull().references(() => usuarios.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull().unique(),
+  expira: timestamp('expira', { withTimezone: true }).notNull(),
+  usadoEn: timestamp('usado_en', { withTimezone: true }),
   creadoEn: creado(),
 });
 

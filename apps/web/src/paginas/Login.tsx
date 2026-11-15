@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useSesion } from '../sesion';
 import { mensajeError } from '../util';
 import { Logo } from '../App';
+import { FormOlvide } from './Cuenta';
 
 /** Usuarios de la demo (datos ficticios). Se ocultan en producción con VITE_DEMO=0. */
 const DEMO = import.meta.env.VITE_DEMO !== '0';
@@ -18,6 +19,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [olvide, setOlvide] = useState(false);
 
   async function enviar(e: FormEvent, cred?: [string, string]) {
     e.preventDefault();
@@ -45,6 +47,7 @@ export function Login() {
         <p style={{ fontSize: '0.8rem' }}>Santiago · Antofagasta · Sur de Chile</p>
       </section>
       <section className="form-panel">
+        {olvide ? <div style={{ width: 'min(360px, 100%)' }}><FormOlvide onVolver={() => setOlvide(false)} /></div> : (
         <form className="form" onSubmit={enviar}>
           <h1 style={{ marginBottom: 6 }}>Iniciar sesión</h1>
           <label className="campo">
@@ -59,6 +62,9 @@ export function Login() {
           <button className="btn primario" disabled={enviando} style={{ justifyContent: 'center' }}>
             {enviando ? 'Ingresando…' : 'Ingresar'}
           </button>
+          <p style={{ textAlign: 'center', margin: 0 }}>
+            <button type="button" className="btn link" onClick={() => setOlvide(true)}>¿Olvidó su contraseña?</button>
+          </p>
           {DEMO && (
             <div className="demo">
               Demo con datos ficticios — entrar como:
@@ -72,6 +78,7 @@ export function Login() {
             </div>
           )}
         </form>
+        )}
       </section>
     </div>
   );

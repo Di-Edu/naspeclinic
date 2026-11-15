@@ -8,6 +8,7 @@ export interface Usuario {
   empresaId: number | null;
   empresa: string | null;
   activo?: boolean;
+  debeCambiarPassword: boolean;
 }
 
 export interface Empresa { id: number; nombre: string; rut: string; emailGerente: string | null; activa: boolean }

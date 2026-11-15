@@ -26,6 +26,13 @@ export type NivelHallazgo = (typeof NIVELES_HALLAZGO)[number];
 export const ESTADOS_CITA = ['pendiente', 'confirmada', 'cancelada', 'ausente'] as const;
 export type EstadoCita = (typeof ESTADOS_CITA)[number];
 
+/** Política de contraseñas: devuelve el problema o null si es válida. */
+export function problemaPassword(p: string): string | null {
+  if (p.length < 10) return 'Debe tener al menos 10 caracteres';
+  if (!/[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(p) || !/\d/.test(p)) return 'Debe incluir letras y números';
+  return null;
+}
+
 /** Deja el RUT como "12345678-K" (sin puntos, DV en mayúscula). */
 export function normalizarRut(rut: string): string {
   const limpio = rut.replace(/[^0-9kK]/g, '').toUpperCase();

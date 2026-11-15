@@ -20,6 +20,8 @@ export const config = {
   /** 32 bytes en hex (64 caracteres). Genérela con: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" */
   llaveCifrado: requerida('ENCRYPTION_KEY', '0'.repeat(64)),
   llaveHmac: requerida('HMAC_KEY', 'dev-hmac-no-usar-en-produccion'),
+  /** URL pública de la web, para los enlaces de los correos */
+  appUrl: process.env.APP_URL ?? 'http://localhost:5173',
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(','),
   uploadsDir: process.env.UPLOADS_DIR ?? './uploads',
   maxArchivoMB: 10,

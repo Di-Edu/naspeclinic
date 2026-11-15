@@ -4,7 +4,7 @@ import cors from 'cors';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import type { DB } from './db';
 import { config } from './config';
-import { requiereAuth } from './middleware/auth';
+import { crearRequiereAuth } from './middleware/auth';
 import { manejadorErrores } from './lib/errores';
 import { authRouter } from './routes/auth';
 import { adminRouter } from './routes/admin';
@@ -31,7 +31,16 @@ function limitesLogin() {
     },
     skip: (req) => req.method !== 'POST' || !req.path.startsWith('/login'),
   });
-  return [porIp, porCorreo];
+  // "Olvidé mi contraseña": máx. 5 correos por cuenta cada 15 min (evita usarlo para spam)
+  const olvide = rateLimit({
+    ...comun,
+    limit: 5,
+    keyGenerator: (req) => `olvide:${typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ipKeyGenerator(req.ip ?? '')}`,
+    skip: (req) => req.method !== 'POST' || !req.path.startsWith('/olvide'),
+  });
+  // Intentos de usar enlaces de recuperación (adivinar tokens): por IP
+  const restablecer = rateLimit({ ...comun, limit: 30, skip: (req) => req.method !== 'POST' || !req.path.startsWith('/restablecer') });
+  return [porIp, porCorreo, olvide, restablecer];
 }
 
 export function crearApp(db: DB) {
@@ -48,7 +57,8 @@ export function crearApp(db: DB) {
 
   app.get('/api/salud', (_req, res) => { res.json({ ok: true }); });
 
-  app.use('/api/auth', ...limitesLogin(), authRouter(db));
+  const requiereAuth = crearRequiereAuth(db);
+  app.use('/api/auth', ...limitesLogin(), authRouter(db, requiereAuth));
   app.use('/api', requiereAuth);
   app.use('/api', adminRouter(db));
   app.use('/api', clinicoRouter(db));

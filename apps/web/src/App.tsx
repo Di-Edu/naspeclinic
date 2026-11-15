@@ -11,6 +11,7 @@ import { Examenes } from './paginas/Examenes';
 import { Agenda } from './paginas/Agenda';
 import { Reportes } from './paginas/Reportes';
 import { Usuarios } from './paginas/Usuarios';
+import { CambioObligatorio, ModalCambiarPassword, Restablecer } from './paginas/Cuenta';
 
 const NAV: { a: string; texto: string; roles: Rol[]; icono: ReactNode }[] = [
   { a: '/dashboard', texto: 'Dashboard', roles: ['admin', 'gerente'], icono: <path d="M3 13h7V3H3zm0 8h7v-6H3zm11 0h7V11h-7zm0-18v6h7V3z" /> },
@@ -31,10 +32,13 @@ export const Logo = ({ tam = 30 }: { tam?: number }) => (
 export function App() {
   const { usuario, cargando, salir } = useSesion();
   const [menu, setMenu] = useState(false);
+  const [cambiarPass, setCambiarPass] = useState(false);
   const loc = useLocation();
 
+  if (loc.pathname === '/restablecer') return <Restablecer />;
   if (cargando) return <div className="cargando" style={{ padding: 32 }}>Cargando…</div>;
   if (!usuario) return <Login />;
+  if (usuario.debeCambiarPassword) return <CambioObligatorio />;
 
   const nav = NAV.filter((n) => n.roles.includes(usuario.rol));
   const inicio = nav[0].a;
@@ -64,7 +68,10 @@ export function App() {
         <div className="pie">
           <div className="nombre">{usuario.nombre}</div>
           <div className="rol">{ROL_LABEL[usuario.rol]}{usuario.empresa ? ` · ${usuario.empresa}` : ''}</div>
-          <button onClick={salir}>Cerrar sesión</button>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <button onClick={(e) => { e.stopPropagation(); setMenu(false); setCambiarPass(true); }}>Cambiar contraseña</button>
+            <button onClick={salir}>Cerrar sesión</button>
+          </div>
         </div>
       </aside>
       <main className="principal">
@@ -79,6 +86,7 @@ export function App() {
           <Route path="*" element={<Navigate to={inicio} replace />} />
         </Routes>
       </main>
+      {cambiarPass && <ModalCambiarPassword onCerrar={() => setCambiarPass(false)} />}
     </div>
   );
 }

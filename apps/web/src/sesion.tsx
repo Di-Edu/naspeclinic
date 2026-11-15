@@ -6,6 +6,8 @@ interface Ctx {
   usuario: Usuario | null;
   cargando: boolean;
   entrar(email: string, password: string): Promise<void>;
+  /** Cambia la contraseña propia; el servidor cierra las otras sesiones y entrega un token nuevo. */
+  cambiarPassword(actual: string, nueva: string): Promise<void>;
   salir(): void;
 }
 
@@ -32,7 +34,13 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     setUsuario(r.usuario);
   };
 
-  return <SesionCtx.Provider value={{ usuario, cargando, entrar, salir }}>{children}</SesionCtx.Provider>;
+  const cambiarPassword = async (actual: string, nueva: string) => {
+    const r = await api.post<{ token: string; usuario: Usuario }>('/auth/cambiar-password', { actual, nueva });
+    token.guardar(r.token);
+    setUsuario(r.usuario);
+  };
+
+  return <SesionCtx.Provider value={{ usuario, cargando, entrar, cambiarPassword, salir }}>{children}</SesionCtx.Provider>;
 }
 
 export function useSesion() {

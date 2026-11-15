@@ -4,7 +4,8 @@ import type { Express } from 'express';
 import { crearDb, type DB } from '../src/db';
 import { crearApp } from '../src/app';
 import { sembrar, PASSWORD_DEMO } from '../src/seed';
-import { pacientes } from '../src/db/schema';
+import { pacientes, tokensRecuperacion } from '../src/db/schema';
+import { bandejaSimulada } from '../src/services/correo';
 
 let app: Express;
 let db: DB;
@@ -129,6 +130,80 @@ describe('pacientes y exámenes', () => {
     expect(ex.body.pagina).toBe(2);
     expect(ex.body.items.length).toBe(Math.min(200, ex.body.total - 200));
     expect((await request(app).get('/api/examenes?porPagina=5000').set(como('admin'))).status).toBe(400);
+  });
+});
+
+describe('contraseñas', () => {
+  const ultimoEnlace = () => {
+    const c = bandejaSimulada.at(-1)!;
+    return /token=([\w-]+)/.exec(c.texto)![1];
+  };
+  let nuevoId: number;
+
+  it('un usuario creado por el admin debe cambiar la contraseña al entrar', async () => {
+    expect((await request(app).post('/api/usuarios').set(como('admin'))
+      .send({ email: 'nuevo@example.com', nombre: 'Nuevo Operador', rol: 'operador', password: 'solo-letras-aqui' })).status).toBe(400);
+    const c = await request(app).post('/api/usuarios').set(como('admin'))
+      .send({ email: 'nuevo@example.com', nombre: 'Nuevo Operador', rol: 'operador', password: 'Inicial-2026x' });
+    expect(c.status).toBe(201);
+    expect(c.body.debeCambiarPassword).toBe(true);
+    nuevoId = c.body.id;
+
+    const l = await request(app).post('/api/auth/login').send({ email: 'nuevo@example.com', password: 'Inicial-2026x' });
+    expect(l.body.usuario.debeCambiarPassword).toBe(true);
+    const t = { Authorization: `Bearer ${l.body.token}` };
+    expect((await request(app).get('/api/citas').set(t)).status).toBe(403);
+    expect((await request(app).get('/api/auth/me').set(t)).status).toBe(200);
+
+    expect((await request(app).post('/api/auth/cambiar-password').set(t).send({ actual: 'mala', nueva: 'Propia-2026z' })).status).toBe(400);
+    const cambio = await request(app).post('/api/auth/cambiar-password').set(t).send({ actual: 'Inicial-2026x', nueva: 'Propia-2026z' });
+    expect(cambio.status).toBe(200);
+    expect(cambio.body.usuario.debeCambiarPassword).toBe(false);
+    // el token anterior queda invalidado; el nuevo funciona
+    expect((await request(app).get('/api/citas').set(t)).status).toBe(401);
+    expect((await request(app).get('/api/citas').set({ Authorization: `Bearer ${cambio.body.token}` })).status).toBe(200);
+  });
+
+  it('"olvidé mi contraseña" responde igual exista o no el correo, y el enlace sirve una sola vez', async () => {
+    const antes = bandejaSimulada.length;
+    const noExiste = await request(app).post('/api/auth/olvide').send({ email: 'nadie@example.com' });
+    expect(bandejaSimulada.length).toBe(antes);
+    const existe = await request(app).post('/api/auth/olvide').send({ email: 'nuevo@example.com' });
+    expect(existe.body).toEqual(noExiste.body);
+    expect(bandejaSimulada.length).toBe(antes + 1);
+    const token = ultimoEnlace();
+
+    expect((await request(app).post('/api/auth/restablecer').send({ token, password: 'corta1' })).status).toBe(400);
+    expect((await request(app).post('/api/auth/restablecer').send({ token, password: 'Recuperada-2026' })).status).toBe(200);
+    expect((await request(app).post('/api/auth/restablecer').send({ token, password: 'Otra-vez-2026' })).status).toBe(400);
+    expect((await request(app).post('/api/auth/login').send({ email: 'nuevo@example.com', password: 'Recuperada-2026' })).status).toBe(200);
+  });
+
+  it('un enlace vencido no sirve', async () => {
+    await request(app).post('/api/auth/olvide').send({ email: 'nuevo@example.com' });
+    const token = ultimoEnlace();
+    await db.update(tokensRecuperacion).set({ expira: new Date(Date.now() - 1000) });
+    expect((await request(app).post('/api/auth/restablecer').send({ token, password: 'Vencida-2026' })).status).toBe(400);
+  });
+
+  it('el admin puede restablecer con contraseña temporal o enviando un enlace', async () => {
+    expect((await request(app).post(`/api/usuarios/${nuevoId}/restablecer`).set(como('operador')).send({ modo: 'temporal' })).status).toBe(403);
+    const tmp = await request(app).post(`/api/usuarios/${nuevoId}/restablecer`).set(como('admin')).send({ modo: 'temporal' });
+    expect(tmp.body.passwordTemporal).toMatch(/^(?=.*[A-Za-z])(?=.*\d).{12}$/);
+    const l = await request(app).post('/api/auth/login').send({ email: 'nuevo@example.com', password: tmp.body.passwordTemporal });
+    expect(l.body.usuario.debeCambiarPassword).toBe(true);
+
+    const enl = await request(app).post(`/api/usuarios/${nuevoId}/restablecer`).set(como('admin')).send({ modo: 'enlace' });
+    expect(enl.body.enviadoA).toBe('nuevo@example.com');
+    expect(bandejaSimulada.at(-1)!.para).toBe('nuevo@example.com');
+  });
+
+  it('desactivar a un usuario corta su sesión de inmediato', async () => {
+    const l = await request(app).post('/api/auth/login').send({ email: 'gerente2@example.com', password: PASSWORD_DEMO });
+    const t = { Authorization: `Bearer ${l.body.token}` };
+    expect((await request(app).get('/api/dashboard').set(t)).status).toBe(200);
+    await request(app).patch(`/api/usuarios/${l.body.usuario.id}`).set(como('admin')).send({ activo: false });
+    expect((await request(app).get('/api/dashboard').set(t)).status).toBe(401);
   });
 });
 

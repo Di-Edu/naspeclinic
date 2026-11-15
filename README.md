@@ -10,7 +10,8 @@ genéticos), agenda de citas por sede y reportes ejecutivos para los gerentes de
 
 | Módulo                                   | Estado |
 |------------------------------------------|--------|
-| API: login JWT, roles, bloqueo por intentos | ✅ |
+| Login JWT, roles, bloqueo por intentos (sin bloquear redes compartidas) | ✅ |
+| Recuperación de contraseña por correo, cambio obligatorio de la contraseña inicial y restablecimiento por el admin | ✅ |
 | API: pacientes (RUT cifrado + búsqueda por índice ciego) | ✅ |
 | API: exámenes, archivos (PDF/JPG/PNG), historial | ✅ |
 | API: agenda de citas con filtros por sede/fecha/estado | ✅ |
