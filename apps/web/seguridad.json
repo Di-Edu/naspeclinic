@@ -1,0 +1,9 @@
+{
+  "_comentario": "Cabeceras de seguridad de la web. Las usa vite.config.ts (vista previa) y deben coincidir con vercel.json. Al conocer el dominio de la API, cambiar 'https:' en connect-src por ese dominio.",
+  "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests",
+  "X-Frame-Options": "DENY",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains"
+}

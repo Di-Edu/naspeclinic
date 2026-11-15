@@ -22,6 +22,7 @@ genéticos), agenda de citas por sede y reportes ejecutivos para los gerentes de
 | Aptitud por trabajador para la empresa (sin diagnósticos), vencimientos, aviso por correo y exportación a Excel | ✅ |
 | Seguimiento de hallazgos: derivaciones, recontroles y no aptos temporales hasta su cierre | ✅ |
 | Web: login, dashboard KPI, pacientes, exámenes, agenda, reporte y usuarios | ✅ (demo; se adapta al diseño del prototipo del cliente) |
+| Protección contra abuso: límites por usuario, tiempos máximos, validación del contenido de archivos, cierre de sesión en el servidor, CSP | ✅ |
 | App móvil (React Native / Expo)          | ⏳ |
 | Almacenamiento S3 y notificaciones SMS   | ⏳ |
 
@@ -35,7 +36,7 @@ packages/shared  Roles, catálogos y validación de RUT compartidos
 docs/            Arquitectura, modelo de datos, seguridad y plan de trabajo
 ```
 
-Diseño completo en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) y plan por semanas en [`docs/PLAN.md`](docs/PLAN.md).
+Diseño completo en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md), seguridad y checklist de producción en [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md) y plan por semanas en [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Cómo correrlo
 

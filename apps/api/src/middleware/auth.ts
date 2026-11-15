@@ -1,11 +1,12 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import type { Rol } from '@naspeclinic/shared';
 import { config } from '../config';
 import { HttpError } from '../lib/errores';
 import type { DB } from '../db';
-import { usuarios } from '../db/schema';
+import { usuarios, sesionesRevocadas } from '../db/schema';
 
 export interface Sesion {
   id: number;
@@ -20,20 +21,22 @@ declare global {
   namespace Express {
     interface Request {
       usuario?: Sesion;
+      /** Identificador y vencimiento del token de esta petición (para cerrar la sesión) */
+      token?: { jti: string; exp: number };
     }
   }
 }
 
-interface Carga { id: number; pv: number }
+interface Carga { id: number; pv: number; jti: string; exp: number }
 
 /** El token solo lleva el id y la versión de contraseña; rol y empresa se leen siempre de la BD. */
 export function firmarToken(id: number, versionPassword: number): string {
-  const carga: Carga = { id, pv: versionPassword };
-  return jwt.sign(carga, config.jwtSecret, { expiresIn: config.jwtExpira });
+  // jti: identificador único de esta sesión, para poder revocarla al cerrar sesión
+  return jwt.sign({ id, pv: versionPassword, jti: randomUUID() }, config.jwtSecret, { expiresIn: config.jwtExpira });
 }
 
 /** Rutas que se pueden usar aunque falte cambiar la contraseña inicial. */
-const PERMITIDAS_SIN_CAMBIO = ['/api/auth/me', '/api/auth/cambiar-password'];
+const PERMITIDAS_SIN_CAMBIO = ['/api/auth/me', '/api/auth/cambiar-password', '/api/auth/logout'];
 
 /**
  * Valida el JWT y vuelve a leer al usuario: si fue desactivado o cambió su contraseña
@@ -49,9 +52,14 @@ export function crearRequiereAuth(db: DB): RequestHandler {
     } catch {
       return next(new HttpError(401, 'Sesión expirada o inválida'));
     }
+    if (!carga.jti) return next(new HttpError(401, 'Sesión expirada o inválida'));
     try {
-      const [u] = await db.select().from(usuarios).where(eq(usuarios.id, carga.id));
-      if (!u || !u.activo || u.versionPassword !== carga.pv) return next(new HttpError(401, 'Sesión expirada o inválida'));
+      const [[u], [revocada]] = await Promise.all([
+        db.select().from(usuarios).where(eq(usuarios.id, carga.id)),
+        db.select({ jti: sesionesRevocadas.jti }).from(sesionesRevocadas).where(eq(sesionesRevocadas.jti, carga.jti)),
+      ]);
+      if (!u || !u.activo || u.versionPassword !== carga.pv || revocada) return next(new HttpError(401, 'Sesión expirada o inválida'));
+      req.token = { jti: carga.jti, exp: carga.exp };
       req.usuario = { id: u.id, rol: u.rol, empresaId: u.empresaId, nombre: u.nombre, debeCambiarPassword: u.debeCambiarPassword };
       if (u.debeCambiarPassword && !PERMITIDAS_SIN_CAMBIO.includes(req.originalUrl.split('?')[0])) {
         return next(new HttpError(403, 'Debe cambiar su contraseña antes de continuar'));

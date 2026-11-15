@@ -17,6 +17,16 @@ const id = (v: string | string[]) => z.coerce.number().int().positive().parse(v)
 const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato AAAA-MM-DD');
 const MIMES = ['application/pdf', 'image/jpeg', 'image/png'];
 
+/** Firma (primeros bytes) de cada tipo de archivo permitido. */
+const FIRMAS: Record<string, number[][]> = {
+  'application/pdf': [[0x25, 0x50, 0x44, 0x46, 0x2d]], // %PDF-
+  'image/jpeg': [[0xff, 0xd8, 0xff]],
+  'image/png': [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]],
+};
+function contenidoCoincide(datos: Buffer, mime: string) {
+  return (FIRMAS[mime] ?? []).some((firma) => firma.every((b, i) => datos[i] === b));
+}
+
 /** ?pagina=1&porPagina=50 (máximo 200 por página) */
 function paginacion(query: unknown) {
   const { pagina, porPagina } = z.object({
@@ -206,6 +216,9 @@ export function clinicoRouter(db: DB) {
     if (!e) throw new HttpError(404, 'Examen no encontrado');
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
     if (!files.length) throw new HttpError(400, 'Adjunte al menos un archivo en el campo "archivos"');
+    // El tipo que declara el navegador se puede falsificar: se revisa el contenido real
+    const falso = files.find((f) => !contenidoCoincide(f.buffer, f.mimetype));
+    if (falso) throw new HttpError(400, `"${falso.originalname}" no es un ${falso.mimetype === 'application/pdf' ? 'PDF' : 'imagen'} válido`);
     const creados = [];
     for (const f of files) {
       const clave = await almacenamiento.guardar(f.buffer, f.originalname);

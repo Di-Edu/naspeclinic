@@ -96,7 +96,7 @@ export function CambioObligatorio() {
         Su contraseña actual fue asignada por un administrador. Por seguridad, debe reemplazarla antes de continuar.
       </p>
       <FormCambio textoBoton="Guardar y continuar" onListo={() => { /* la sesión se actualiza sola */ }} />
-      <p style={{ textAlign: 'center', marginTop: 16 }}><button className="btn link" onClick={salir}>Cerrar sesión</button></p>
+      <p style={{ textAlign: 'center', marginTop: 16 }}><button className="btn link" onClick={() => salir()}>Cerrar sesión</button></p>
     </PantallaSimple>
   );
 }

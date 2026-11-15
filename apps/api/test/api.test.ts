@@ -381,3 +381,36 @@ describe('dashboard y reportes', () => {
     expect(r.body).toMatchObject({ enviado: true, simulado: true });
   });
 });
+
+describe('protecciones contra abuso', () => {
+  it('cerrar sesión invalida el token en el servidor', async () => {
+    const l = await request(app).post('/api/auth/login').send({ email: 'operador@example.com', password: PASSWORD_DEMO });
+    const t = { Authorization: `Bearer ${l.body.token}` };
+    expect((await request(app).get('/api/citas').set(t)).status).toBe(200);
+    expect((await request(app).post('/api/auth/logout').set(t)).status).toBe(200);
+    expect((await request(app).get('/api/citas').set(t)).status).toBe(401);
+    // las demás sesiones del mismo usuario siguen funcionando
+    expect((await request(app).get('/api/citas').set(como('operador'))).status).toBe(200);
+  });
+
+  it('rechaza un archivo cuyo contenido no coincide con su tipo', async () => {
+    const ex = await request(app).get('/api/examenes?porPagina=1').set(como('operador'));
+    const falso = await request(app).post(`/api/examenes/${ex.body.items[0].id}/archivos`).set(como('operador'))
+      .attach('archivos', Buffer.from('MZ\x90\x00 esto es un ejecutable'), { filename: 'resultado.pdf', contentType: 'application/pdf' });
+    expect(falso.status).toBe(400);
+    expect(falso.body.error).toContain('no es un PDF válido');
+    const png = await request(app).post(`/api/examenes/${ex.body.items[0].id}/archivos`).set(como('operador'))
+      .attach('archivos', Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]), { filename: 'rx.png', contentType: 'image/png' });
+    expect(png.status).toBe(201);
+  });
+
+  it('limita los envíos de correo por usuario', async () => {
+    const estados: number[] = [];
+    for (let i = 0; i < 7; i++) {
+      estados.push((await request(app).post('/api/aptitud/notificar').set(como('admin')).send({ empresaId: empresaIds[0] })).status);
+    }
+    expect(estados).toContain(429);
+    // otras acciones del mismo usuario no se bloquean
+    expect((await request(app).get('/api/usuarios').set(como('admin'))).status).toBe(200);
+  });
+});

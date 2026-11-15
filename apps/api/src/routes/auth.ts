@@ -1,10 +1,10 @@
 import { Router, type RequestHandler } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { eq, lt } from 'drizzle-orm';
 import { problemaPassword } from '@naspeclinic/shared';
 import type { DB } from '../db';
-import { usuarios, empresas } from '../db/schema';
+import { usuarios, empresas, sesionesRevocadas } from '../db/schema';
 import { firmarToken } from '../middleware/auth';
 import { HttpError } from '../lib/errores';
 import { auditar } from '../lib/auditoria';
@@ -49,6 +49,15 @@ export function authRouter(db: DB, requiereAuth: RequestHandler) {
     await db.update(usuarios).set({ intentosFallidos: 0, bloqueadoHasta: null }).where(eq(usuarios.id, u.id));
     await auditar(db, req, 'login', 'usuario', u.id, u.id);
     res.json({ token: firmarToken(u.id, u.versionPassword), usuario: await perfil(u.id) });
+  });
+
+  /** Cerrar sesión: el token deja de servir de inmediato (no solo se borra en el navegador). */
+  r.post('/logout', requiereAuth, async (req, res) => {
+    const { jti, exp } = req.token!;
+    await db.insert(sesionesRevocadas).values({ jti, expira: new Date(exp * 1000) }).onConflictDoNothing();
+    await db.delete(sesionesRevocadas).where(lt(sesionesRevocadas.expira, new Date())); // limpieza
+    await auditar(db, req, 'logout', 'usuario', req.usuario!.id);
+    res.json({ ok: true });
   });
 
   r.get('/me', requiereAuth, async (req, res) => {

@@ -21,6 +21,12 @@ export async function crearDb(opts: { memoria?: boolean } = {}): Promise<DB> {
     const pool = new pg.Pool({
       connectionString: config.databaseUrl,
       ssl: config.isProd ? { rejectUnauthorized: false } : undefined,
+      max: 20, // conexiones simultáneas a la base
+      connectionTimeoutMillis: 5_000,
+      idleTimeoutMillis: 30_000,
+      // Ninguna consulta puede tardar más de 15 s: evita que una consulta pesada bloquee al resto
+      statement_timeout: 15_000,
+      idle_in_transaction_session_timeout: 30_000,
     });
     const db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: carpetaMigraciones });

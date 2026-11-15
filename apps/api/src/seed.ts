@@ -71,7 +71,7 @@ export async function sembrar(db: DB, opts: { mesesAtras?: number; hoy?: Date } 
   const hoyIso = iso(hoy);
   const meses = opts.mesesAtras ?? 12;
 
-  await db.execute(sql`truncate auditoria, tokens_recuperacion, seguimientos, archivos, citas, examenes, evaluaciones,
+  await db.execute(sql`truncate auditoria, sesiones_revocadas, tokens_recuperacion, seguimientos, archivos, citas, examenes, evaluaciones,
     cargo_protocolos, cargos, protocolo_examenes, protocolos, pacientes, dotaciones, usuarios, empresas, sedes restart identity cascade`);
 
   const sedesC = await db.insert(sedes).values([{ nombre: 'Santiago' }, { nombre: 'Antofagasta' }, { nombre: 'Sur' }]).returning();

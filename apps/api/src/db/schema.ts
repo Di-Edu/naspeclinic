@@ -208,3 +208,9 @@ export const seguimientos = pgTable('seguimientos', {
   cerradoEn: timestamp('cerrado_en', { withTimezone: true }),
   creadoEn: creado(),
 }, (t) => [index('seguimientos_estado_fecha_idx').on(t.estado, t.fechaCompromiso)]);
+
+/** Sesiones cerradas antes de vencer (logout): su token deja de servir. Se limpian al expirar. */
+export const sesionesRevocadas = pgTable('sesiones_revocadas', {
+  jti: text('jti').primaryKey(),
+  expira: timestamp('expira', { withTimezone: true }).notNull(),
+});

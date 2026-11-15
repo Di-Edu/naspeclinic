@@ -22,6 +22,13 @@
       "when": 1794759969963,
       "tag": "0002_protocolos_evaluaciones",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794761380076,
+      "tag": "0003_sesiones_revocadas",
+      "breakpoints": true
     }
   ]
 }

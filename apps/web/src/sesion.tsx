@@ -8,7 +8,7 @@ interface Ctx {
   entrar(email: string, password: string): Promise<void>;
   /** Cambia la contraseña propia; el servidor cierra las otras sesiones y entrega un token nuevo. */
   cambiarPassword(actual: string, nueva: string): Promise<void>;
-  salir(): void;
+  salir(revocar?: boolean): void;
 }
 
 const SesionCtx = createContext<Ctx | null>(null);
@@ -17,15 +17,17 @@ export function SesionProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [cargando, setCargando] = useState(!!token.leer());
 
-  const salir = useCallback(() => {
+  /** Limpia la sesión local. Con `revocar`, además invalida el token en el servidor. */
+  const salir = useCallback((revocar = true) => {
+    if (revocar && token.leer()) api.post('/auth/logout').catch(() => { /* ya expirada */ });
     token.guardar(null);
     setUsuario(null);
   }, []);
 
   useEffect(() => {
-    onSesionExpirada(salir);
+    onSesionExpirada(() => salir(false));
     if (!token.leer()) return;
-    api.get<Usuario>('/auth/me').then(setUsuario).catch(salir).finally(() => setCargando(false));
+    api.get<Usuario>('/auth/me').then(setUsuario).catch(() => salir(false)).finally(() => setCargando(false));
   }, [salir]);
 
   const entrar = async (email: string, password: string) => {

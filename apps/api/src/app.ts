@@ -44,6 +44,33 @@ function limitesLogin() {
   return [porIp, porCorreo, olvide, restablecer];
 }
 
+/**
+ * Límites por usuario autenticado (no por IP: en una faena muchos comparten la misma).
+ * Frenan a quien use una cuenta robada o un script para saturar el servidor.
+ * - General: 300 peticiones por minuto (un uso normal no pasa de unas decenas).
+ * - Pesadas (dashboard, reportes, PDF, exportaciones): 40 por minuto.
+ * - Envíos de correo: 5 por minuto.
+ * Nota: el contador vive en memoria; con varias instancias de la API se debe usar Redis.
+ */
+function limitesPorUsuario() {
+  const base = {
+    windowMs: 60_000, standardHeaders: true, legacyHeaders: false,
+    keyGenerator: (req: express.Request) => `usuario:${req.usuario?.id ?? ipKeyGenerator(req.ip ?? '')}`,
+    message: { error: 'Demasiadas solicitudes. Espere un momento e intente de nuevo.' },
+  };
+  const general = rateLimit({ ...base, limit: 300 });
+  const pesadas = rateLimit({
+    ...base, limit: 40,
+    skip: (req) => !/^\/(dashboard|reportes|aptitud)(\/|$)/.test(req.path),
+  });
+  const correos = rateLimit({
+    ...base, limit: 5,
+    message: { error: 'Demasiados envíos de correo. Espere un minuto.' },
+    skip: (req) => req.method !== 'POST' || !/^\/(reportes\/\d+\/enviar|aptitud\/notificar|usuarios\/\d+\/restablecer)$/.test(req.path),
+  });
+  return [general, pesadas, correos];
+}
+
 export function crearApp(db: DB) {
   const app = express();
   app.set('trust proxy', 1); // Railway / Vercel están detrás de proxy
@@ -61,6 +88,7 @@ export function crearApp(db: DB) {
   const requiereAuth = crearRequiereAuth(db);
   app.use('/api/auth', ...limitesLogin(), authRouter(db, requiereAuth));
   app.use('/api', requiereAuth);
+  app.use('/api', ...limitesPorUsuario());
   app.use('/api', adminRouter(db));
   app.use('/api', clinicoRouter(db));
   app.use('/api', reportesRouter(db));

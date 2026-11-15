@@ -76,7 +76,7 @@ export function App() {
           <div className="rol">{ROL_LABEL[usuario.rol]}{usuario.empresa ? ` · ${usuario.empresa}` : ''}</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button onClick={(e) => { e.stopPropagation(); setMenu(false); setCambiarPass(true); }}>Cambiar contraseña</button>
-            <button onClick={salir}>Cerrar sesión</button>
+            <button onClick={() => salir()}>Cerrar sesión</button>
           </div>
         </div>
       </aside>
