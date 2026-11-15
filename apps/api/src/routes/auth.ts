@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import type { DB } from '../db';
-import { usuarios } from '../db/schema';
+import { usuarios, empresas } from '../db/schema';
 import { firmarToken, requiereAuth } from '../middleware/auth';
 import { HttpError } from '../lib/errores';
 import { auditar } from '../lib/auditoria';
@@ -33,12 +33,20 @@ export function authRouter(db: DB) {
     const sesion = { id: u.id, rol: u.rol, empresaId: u.empresaId, nombre: u.nombre };
     req.usuario = sesion;
     await auditar(db, req, 'login', 'usuario', u.id);
-    res.json({ token: firmarToken(sesion), usuario: { ...sesion, email: u.email } });
+    res.json({ token: firmarToken(sesion), usuario: await perfil(sesion.id) });
   });
 
-  r.get('/me', requiereAuth, (req, res) => {
-    res.json(req.usuario);
+  r.get('/me', requiereAuth, async (req, res) => {
+    res.json(await perfil(req.usuario!.id));
   });
+
+  async function perfil(id: number) {
+    const [p] = await db.select({
+      id: usuarios.id, email: usuarios.email, nombre: usuarios.nombre, rol: usuarios.rol,
+      empresaId: usuarios.empresaId, empresa: empresas.nombre,
+    }).from(usuarios).leftJoin(empresas, eq(usuarios.empresaId, empresas.id)).where(eq(usuarios.id, id));
+    return p;
+  }
 
   return r;
 }

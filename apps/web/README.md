@@ -1,9 +1,18 @@
-# Web (React)
+# Web (React + Vite)
 
-Se construye sobre el prototipo React de Naspeclinic (paleta, tipografía y componentes), que
-se recibe al inicio del proyecto. Consumirá la API de `apps/api` y se publica en Vercel.
+Interfaz de Naspeclinic. Consume la API de `apps/api` (en desarrollo, Vite redirige `/api` a `localhost:4000`).
 
-Vistas por rol:
+```bash
+npm run dev:api   # en una terminal
+npm run dev:web   # en otra: http://localhost:5173
+```
 
-- **Admin / Operador:** pacientes, exámenes, agenda de citas, usuarios.
-- **Gerente:** dashboard KPI y reporte gerencial de su empresa (solo lectura).
+Pantallas por rol:
+
+- **Admin:** todo, más usuarios y envío del reporte al gerente.
+- **Operador:** agenda (día/semana, filtro por sede, cambio de estado), pacientes con historial, exámenes con archivos.
+- **Gerente:** dashboard KPI y reporte gerencial de su empresa (solo lectura, descarga en PDF).
+
+Variables (`.env`): `VITE_API_URL` (URL de la API en producción) y `VITE_DEMO=0` para ocultar los accesos de demo.
+
+El diseño visual se ajustará a la paleta, tipografía y componentes del prototipo de Naspeclinic.

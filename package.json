@@ -9,6 +9,8 @@
   ],
   "scripts": {
     "dev:api": "npm run dev -w @naspeclinic/api",
+    "dev:web": "npm run dev -w @naspeclinic/web",
+    "build:web": "npm run build -w @naspeclinic/web",
     "seed": "npm run seed -w @naspeclinic/api",
     "test": "npm test -w @naspeclinic/api",
     "typecheck": "npm run typecheck -w @naspeclinic/api"

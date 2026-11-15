@@ -4,7 +4,7 @@
  */
 import bcrypt from 'bcryptjs';
 import { sql } from 'drizzle-orm';
-import { TIPOS_EXAMEN, type TipoExamen } from '@naspeclinic/shared';
+import { TIPOS_EXAMEN, TIPO_EXAMEN_LABEL, type TipoExamen } from '@naspeclinic/shared';
 import type { DB } from './db';
 import { empresas, sedes, usuarios, pacientes, examenes, citas, dotaciones } from './db/schema';
 import { cifrar, hashRut } from './lib/cifrado';
@@ -101,7 +101,7 @@ export async function sembrar(db: DB, opts: { mesesAtras?: number; hoy?: Date } 
         estado: r() < 0.92 ? 'completado' : 'en_proceso',
         resultado: nivel === 'critico' ? 'no_apto' : nivel === 'moderado' ? 'apto_con_restricciones' : 'apto',
         nivelHallazgo: nivel,
-        observacionesCifradas: nivel !== 'ninguno' ? cifrar(`Hallazgo ${nivel} en evaluación ${tipo}. Derivar a especialista.`) : null,
+        observacionesCifradas: nivel !== 'ninguno' ? cifrar(`Hallazgo ${nivel === 'critico' ? 'crítico' : 'moderado'} en evaluación de ${TIPO_EXAMEN_LABEL[tipo].toLowerCase()}. Derivar a especialista.`) : null,
       });
     }
   }

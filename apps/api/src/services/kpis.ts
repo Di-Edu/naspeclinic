@@ -135,13 +135,13 @@ function recomendar(
 ): string[] {
   const r: string[] = [];
   if (k.hallazgos.criticos > 0) {
-    r.push(`Hay ${k.hallazgos.criticos} hallazgo(s) crítico(s): priorizar evaluación médica y restricción de tareas de riesgo hasta su control.`);
+    r.push(`${k.hallazgos.criticos === 1 ? 'Hay 1 hallazgo crítico' : `Hay ${k.hallazgos.criticos} hallazgos críticos`}: priorizar evaluación médica y restricción de tareas de riesgo hasta su control.`);
   }
   if (k.cobertura !== null && k.cobertura < 80) {
-    r.push(`La cobertura es ${k.cobertura}%: programar un operativo de exámenes para alcanzar al menos 80% de la dotación.`);
+    r.push(`La cobertura es ${k.cobertura.toLocaleString('es-CL')}%: programar un operativo de exámenes para alcanzar al menos 80% de la dotación.`);
   }
   if (k.ausentismo !== null && k.ausentismo > 10) {
-    r.push(`El ausentismo a citas es ${k.ausentismo}%: confirmar citas con 48 h de anticipación y coordinar turnos con supervisores.`);
+    r.push(`El ausentismo a citas es ${k.ausentismo.toLocaleString('es-CL')}%: confirmar citas con 48 h de anticipación y coordinar turnos con supervisores.`);
   }
   const peor = esp.filter((e) => e.total >= 5).sort((a, b) => b.hallazgos / b.total - a.hallazgos / a.total)[0];
   if (peor && peor.hallazgos / peor.total >= 0.15) {

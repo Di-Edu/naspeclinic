@@ -17,7 +17,7 @@ genéticos), agenda de citas por sede y reportes ejecutivos para los gerentes de
 | API: dashboard KPI (cobertura, ausentismo, hallazgos, ROI, tendencias) | ✅ |
 | API: reporte gerencial en PDF y envío por email | ✅ |
 | API: auditoría de accesos a datos clínicos | ✅ |
-| Web (React, sobre el prototipo del cliente) | ⏳ |
+| Web: login, dashboard KPI, pacientes, exámenes, agenda, reporte y usuarios | ✅ (demo; se adapta al diseño del prototipo del cliente) |
 | App móvil (React Native / Expo)          | ⏳ |
 | Almacenamiento S3 y notificaciones SMS   | ⏳ |
 
@@ -25,7 +25,7 @@ genéticos), agenda de citas por sede y reportes ejecutivos para los gerentes de
 
 ```
 apps/api         API REST — Node 20, Express 5, TypeScript, Drizzle ORM, PostgreSQL
-apps/web         Frontend React (pendiente: se integra el prototipo)
+apps/web         Frontend React + Vite (gráficos SVG propios, responsive, modo oscuro)
 apps/mobile      App React Native con Expo (pendiente)
 packages/shared  Roles, catálogos y validación de RUT compartidos
 docs/            Arquitectura, modelo de datos, seguridad y plan de trabajo
@@ -42,6 +42,7 @@ PGlite (Postgres embebido) y guarda los datos en `apps/api/.data`.
 npm install
 npm run seed      # carga datos de ejemplo
 npm run dev:api   # API en http://localhost:4000/api
+npm run dev:web   # Web en http://localhost:5173 (en otra terminal)
 npm test          # tests de la API
 ```
 

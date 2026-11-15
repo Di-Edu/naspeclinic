@@ -1,0 +1,42 @@
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { api, onSesionExpirada, token } from './api';
+import type { Usuario } from './tipos';
+
+interface Ctx {
+  usuario: Usuario | null;
+  cargando: boolean;
+  entrar(email: string, password: string): Promise<void>;
+  salir(): void;
+}
+
+const SesionCtx = createContext<Ctx | null>(null);
+
+export function SesionProvider({ children }: { children: ReactNode }) {
+  const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [cargando, setCargando] = useState(!!token.leer());
+
+  const salir = useCallback(() => {
+    token.guardar(null);
+    setUsuario(null);
+  }, []);
+
+  useEffect(() => {
+    onSesionExpirada(salir);
+    if (!token.leer()) return;
+    api.get<Usuario>('/auth/me').then(setUsuario).catch(salir).finally(() => setCargando(false));
+  }, [salir]);
+
+  const entrar = async (email: string, password: string) => {
+    const r = await api.post<{ token: string; usuario: Usuario }>('/auth/login', { email, password });
+    token.guardar(r.token);
+    setUsuario(r.usuario);
+  };
+
+  return <SesionCtx.Provider value={{ usuario, cargando, entrar, salir }}>{children}</SesionCtx.Provider>;
+}
+
+export function useSesion() {
+  const c = useContext(SesionCtx);
+  if (!c) throw new Error('useSesion fuera de SesionProvider');
+  return c;
+}
