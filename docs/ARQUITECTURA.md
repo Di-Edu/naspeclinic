@@ -89,6 +89,28 @@ auditoria (usuario, acción, entidad, id, ip, fecha)
 - Nivel de hallazgo: `ninguno`, `moderado`, `critico` → alimenta las alertas clínicas.
 - Estado de cita: `pendiente`, `confirmada`, `cancelada`, `ausente` (no se presentó).
 
+## 3.1 Protocolos, evaluaciones y aptitud
+
+```
+protocolos ─< protocolo_examenes         (batería: qué exámenes incluye y vigencia en meses)
+cargos (por empresa) ─< cargo_protocolos  (qué protocolos exige cada cargo)
+pacientes.cargo_id → cargos
+evaluaciones (trabajador × protocolo) ─< examenes   (al crearla se genera la batería pendiente)
+seguimientos (derivación / recontrol / no apto temporal) → examen o evaluación
+```
+
+- **Evaluación:** preocupacional, periódica o de egreso. Se cierra solo cuando todos sus exámenes
+  están completados; la aptitud sugerida es el peor resultado de la batería. Al cerrar se fija
+  `vigente_hasta` = fecha + vigencia del protocolo (editable). Cerrada, sus exámenes no se modifican.
+- **Vigencia por trabajador y protocolo** (última evaluación cerrada): `vigente`, `por_vencer`
+  (≤ 30 días), `vencido`, `no_apto` o `sin_evaluacion`. "Habilitado" = todos los protocolos de
+  su cargo vigentes o por vencer.
+- **Lo que ve la empresa:** aptitud, restricciones laborales y vigencia. Nunca resultados,
+  hallazgos ni observaciones clínicas.
+- **Seguimientos automáticos:** un hallazgo crítico abre una derivación (15 días), uno moderado
+  un recontrol (90 días) y un "no apto" un no apto temporal con fecha de reevaluación.
+  Motivo y resultado del cierre se guardan cifrados.
+
 ## 4. Definición de KPIs (por empresa y período)
 
 | KPI                  | Fórmula                                                                      |
@@ -99,6 +121,7 @@ auditoria (usuario, acción, entidad, id, ip, fecha)
 | Hallazgos clínicos   | exámenes con nivel `moderado` o `critico`                                     |
 | Atenciones por especialidad | exámenes agrupados por tipo                                            |
 | ROI estimado         | (hallazgos críticos × costo evitado por incidente + moderados × costo evitado) ÷ costo del programa; parámetros configurables por empresa |
+| Trabajadores habilitados | trabajadores con todos sus protocolos vigentes / trabajadores con cargo asignado (foto de hoy) |
 
 > Ausentismo y ROI se validan con Naspeclinic en la primera semana (ver preguntas abiertas).
 

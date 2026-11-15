@@ -41,7 +41,7 @@ export function generarReportePdf(empresa: string, periodoTexto: string, r: Resu
       ['Ausentismo', p(k.ausentismo)],
       ['Hallazgos', `${k.hallazgos.total} (${k.hallazgos.criticos} críticos)`],
       ['ROI estimado', p(k.roi.porcentaje)],
-      ['Atenciones', String(k.atenciones)],
+      ['Habilitados hoy', r.aptitud.trabajadores ? `${p(r.aptitud.porcentajeHabilitados)} (${r.aptitud.habilitados} de ${r.aptitud.trabajadores})` : 's/d'],
     ];
     const w = (ancho - 20) / 3;
     let y = doc.y;

@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { rutValido } from '@naspeclinic/shared';
 import { api, qs } from '../api';
-import type { Paciente } from '../tipos';
+import type { Cargo, Paciente } from '../tipos';
 import { Encabezado, Modal, Paginacion, mensajeError, useApi, useEmpresas, type Pagina } from '../util';
 import { formatearRut } from '../formato';
 
@@ -70,8 +70,9 @@ export function FormPaciente({ onCerrar, onGuardado, inicial }: { onCerrar(): vo
   const empresas = useEmpresas();
   const [f, setF] = useState({
     rut: inicial ? formatearRut(inicial.rut) : '', nombre: inicial?.nombre ?? '', email: inicial?.email ?? '',
-    telefono: inicial?.telefono ?? '', cargo: inicial?.cargo ?? '', empresaId: inicial ? String(inicial.empresaId) : '',
+    telefono: inicial?.telefono ?? '', cargoId: inicial?.cargoId ? String(inicial.cargoId) : '', empresaId: inicial ? String(inicial.empresaId) : '',
   });
+  const cargos = useApi<Cargo[]>(f.empresaId ? `/cargos?empresaId=${f.empresaId}` : null).datos ?? [];
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
@@ -80,7 +81,7 @@ export function FormPaciente({ onCerrar, onGuardado, inicial }: { onCerrar(): vo
   async function guardar(e: FormEvent) {
     e.preventDefault();
     setEnviando(true); setError(null);
-    const body = { ...f, empresaId: Number(f.empresaId), email: f.email || null, telefono: f.telefono || null, cargo: f.cargo || null };
+    const body = { ...f, empresaId: Number(f.empresaId), email: f.email || null, telefono: f.telefono || null, cargoId: f.cargoId ? Number(f.cargoId) : null };
     try {
       onGuardado(inicial ? await api.patch<Paciente>(`/pacientes/${inicial.id}`, body) : await api.post<Paciente>('/pacientes', body));
     } catch (err) { setError(mensajeError(err)); setEnviando(false); }
@@ -95,7 +96,7 @@ export function FormPaciente({ onCerrar, onGuardado, inicial }: { onCerrar(): vo
             {rutMalo && <span style={{ color: 'var(--critico-texto)' }}>RUT inválido</span>}
           </label>
           <label className="campo">Empresa
-            <select required value={f.empresaId} onChange={set('empresaId')}>
+            <select required value={f.empresaId} onChange={(e) => setF({ ...f, empresaId: e.target.value, cargoId: '' })}>
               <option value="">Seleccione…</option>
               {empresas.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
             </select>
@@ -106,7 +107,13 @@ export function FormPaciente({ onCerrar, onGuardado, inicial }: { onCerrar(): vo
           <label className="campo">Correo<input type="email" value={f.email} onChange={set('email')} /></label>
           <label className="campo">Teléfono<input value={f.telefono} onChange={set('telefono')} placeholder="+56 9 …" /></label>
         </div>
-        <label className="campo">Cargo<input value={f.cargo} onChange={set('cargo')} /></label>
+        <label className="campo">Cargo
+          <select value={f.cargoId} onChange={set('cargoId')} disabled={!f.empresaId}>
+            <option value="">{f.empresaId ? 'Sin cargo' : 'Elija primero la empresa'}</option>
+            {cargos.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </select>
+          <span style={{ color: 'var(--texto-3)' }}>El cargo define qué protocolos debe tener vigentes.</span>
+        </label>
         {error && <div className="aviso error">{error}</div>}
         <div className="acciones">
           <button type="button" className="btn" onClick={onCerrar}>Cancelar</button>

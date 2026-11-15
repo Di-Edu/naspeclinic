@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { qs } from '../api';
 import { useSesion } from '../sesion';
 import type { Kpis } from '../tipos';
@@ -17,7 +18,8 @@ export function Dashboard() {
   const esAdmin = usuario!.rol === 'admin';
   const empresas = useEmpresas(esAdmin);
   const [empresaId, setEmpresaId] = useState<string>('');
-  const [meses, setMeses] = useState(6);
+  // 12 meses: el ciclo natural de los protocolos anuales (con menos, la cobertura se ve artificialmente baja)
+  const [meses, setMeses] = useState(12);
 
   const hoy = new Date();
   const desde = isoLocal(new Date(hoy.getFullYear(), hoy.getMonth() - (meses - 1), 1));
@@ -55,6 +57,9 @@ export function Dashboard() {
             <Kpi etq="Cobertura" valor={pct(k.cobertura)} detalle="meta: 80% o más" estado={k.cobertura !== null && k.cobertura < 80 ? 'mal' : 'bien'} />
             <Kpi etq="Ausentismo a citas" valor={pct(k.ausentismo)} detalle="citas sin asistencia" estado={k.ausentismo !== null && k.ausentismo > 10 ? 'mal' : 'bien'} />
             <Kpi etq="Hallazgos clínicos" valor={num(k.hallazgos.total)} detalle={`${k.hallazgos.criticos} críticos · ${k.hallazgos.moderados} moderados`} />
+            <Kpi etq="Habilitados hoy" valor={pct(datos.aptitud.porcentajeHabilitados)}
+              detalle={`${num(datos.aptitud.habilitados)} de ${num(datos.aptitud.trabajadores)} con todo vigente · ${num(datos.aptitud.porEstado.vencido)} vencidos`}
+              estado={datos.aptitud.porcentajeHabilitados !== null && datos.aptitud.porcentajeHabilitados < 90 ? 'mal' : 'bien'} enlace="/aptitud" />
             <Kpi etq="Atenciones" valor={num(k.atenciones)} detalle="exámenes en el período" />
             <Kpi etq="ROI estimado" valor={pct(k.roi.porcentaje)} detalle={`${clp(k.roi.costoEvitadoEstimado)} en costos evitados`} />
           </div>
@@ -129,15 +134,18 @@ export function Dashboard() {
   );
 }
 
-function Kpi({ etq, valor, detalle, estado }: { etq: string; valor: string; detalle: string; estado?: 'bien' | 'mal' }) {
-  return (
-    <div className="tarjeta kpi">
+function Kpi({ etq, valor, detalle, estado, enlace }: { etq: string; valor: string; detalle: string; estado?: 'bien' | 'mal'; enlace?: string }) {
+  const contenido = (
+    <>
       <div className="etq">{etq}</div>
       <div className="valor">{valor}</div>
       <div className="detalle">
         {estado === 'mal' && <span style={{ color: 'var(--serio-texto)', fontWeight: 600 }}>▲ Fuera de meta · </span>}
         {detalle}
       </div>
-    </div>
+    </>
   );
+  return enlace
+    ? <Link to={enlace} className="tarjeta kpi" style={{ color: 'inherit', textDecoration: 'none' }}>{contenido}</Link>
+    : <div className="tarjeta kpi">{contenido}</div>;
 }

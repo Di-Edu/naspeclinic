@@ -33,11 +33,11 @@ export function reportesRouter(db: DB) {
   const r = Router();
   r.use(['/dashboard', '/reportes'], requiereRol('admin', 'gerente'));
 
-  /** Dashboard KPI. Por defecto: últimos 6 meses. */
+  /** Dashboard KPI. Por defecto: últimos 12 meses (ciclo de los protocolos anuales). */
   r.get('/dashboard', async (req, res) => {
     const q = z.object({ empresaId: z.coerce.number().optional(), desde: fecha.optional(), hasta: fecha.optional() }).parse(req.query);
     const hoy = new Date();
-    const inicio = new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1);
+    const inicio = new Date(hoy.getFullYear(), hoy.getMonth() - 11, 1);
     const desde = q.desde ?? `${inicio.getFullYear()}-${String(inicio.getMonth() + 1).padStart(2, '0')}-01`;
     const hasta = q.hasta ?? hoy.toISOString().slice(0, 10);
     res.json(await calcularKpis(db, { empresaId: empresaPermitida(req, q.empresaId), desde, hasta }));

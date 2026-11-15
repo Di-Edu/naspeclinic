@@ -133,6 +133,136 @@ describe('pacientes y exámenes', () => {
   });
 });
 
+describe('protocolos, evaluaciones y aptitud', () => {
+  let protocoloId: number;
+  let cargoId: number;
+  let trabajadorId: number;
+  let evaluacionId: number;
+
+  it('el admin configura un protocolo y un cargo; el operador solo los ve', async () => {
+    const p = await request(app).post('/api/protocolos').set(como('admin'))
+      .send({ nombre: 'Protocolo prueba', vigenciaMeses: 12, examenes: ['cardiologia', 'broncopulmonar'] });
+    expect(p.status).toBe(201);
+    protocoloId = p.body.id;
+    expect((await request(app).post('/api/protocolos').set(como('operador')).send({ nombre: 'X', vigenciaMeses: 1, examenes: ['odontologia'] })).status).toBe(403);
+    const c = await request(app).post('/api/cargos').set(como('admin')).send({ empresaId: empresaIds[0], nombre: 'Cargo prueba', protocoloIds: [protocoloId] });
+    expect(c.status).toBe(201);
+    cargoId = c.body.id;
+    const lista = await request(app).get(`/api/cargos?empresaId=${empresaIds[0]}`).set(como('operador'));
+    expect(lista.body.find((x: { id: number }) => x.id === cargoId).protocoloIds).toEqual([protocoloId]);
+    expect((await request(app).get('/api/protocolos').set(como('gerente1'))).status).toBe(403);
+  });
+
+  it('un trabajador con cargo sin evaluación aparece "sin evaluación"', async () => {
+    expect((await request(app).post('/api/pacientes').set(como('operador'))
+      .send({ rut: '22.222.222-2', nombre: 'Trabajador Bateria', empresaId: empresaIds[1], cargoId })).status).toBe(400); // cargo de otra empresa
+    const t = await request(app).post('/api/pacientes').set(como('operador'))
+      .send({ rut: '22.222.222-2', nombre: 'Trabajador Bateria', empresaId: empresaIds[0], cargoId });
+    expect(t.status).toBe(201);
+    expect(t.body.cargo).toBe('Cargo prueba');
+    trabajadorId = t.body.id;
+    const a = await request(app).get(`/api/aptitud?q=Trabajador Bateria&protocoloId=${protocoloId}`).set(como('admin'));
+    expect(a.body.items).toHaveLength(1);
+    expect(a.body.items[0].estado).toBe('sin_evaluacion');
+  });
+
+  it('crear una evaluación genera la batería de exámenes pendientes', async () => {
+    const ev = await request(app).post('/api/evaluaciones').set(como('operador'))
+      .send({ pacienteId: trabajadorId, protocoloId, tipo: 'preocupacional', fecha: '2026-11-10' });
+    expect(ev.status).toBe(201);
+    evaluacionId = ev.body.id;
+    expect(ev.body.examenes.map((e: { tipo: string }) => e.tipo).sort()).toEqual(['broncopulmonar', 'cardiologia']);
+    expect(ev.body.pendientes).toBe(2);
+    expect(ev.body.vigenciaSugerida).toBe('2027-11-10');
+    // no se puede abrir otra del mismo protocolo mientras esta siga en curso
+    expect((await request(app).post('/api/evaluaciones').set(como('operador'))
+      .send({ pacienteId: trabajadorId, protocoloId, tipo: 'periodica', fecha: '2026-11-11' })).status).toBe(409);
+    // ni cerrarla con exámenes pendientes
+    expect((await request(app).post(`/api/evaluaciones/${evaluacionId}/cerrar`).set(como('operador')).send({ aptitud: 'apto' })).status).toBe(400);
+  });
+
+  it('un hallazgo abre un seguimiento automáticamente', async () => {
+    const ev = await request(app).get(`/api/evaluaciones/${evaluacionId}`).set(como('operador'));
+    const [e1, e2] = ev.body.examenes;
+    await request(app).patch(`/api/examenes/${e1.id}`).set(como('operador')).send({ estado: 'completado', resultado: 'apto', nivelHallazgo: 'ninguno' });
+    await request(app).patch(`/api/examenes/${e2.id}`).set(como('operador'))
+      .send({ estado: 'completado', resultado: 'apto_con_restricciones', nivelHallazgo: 'moderado', observaciones: 'Hipertensión leve' });
+    const s = await request(app).get(`/api/seguimientos?pacienteId=${trabajadorId}`).set(como('operador'));
+    expect(s.body.items).toHaveLength(1);
+    expect(s.body.items[0]).toMatchObject({ tipo: 'recontrol', estado: 'abierto', examenId: e2.id });
+    // editar de nuevo el mismo examen no duplica el seguimiento
+    await request(app).patch(`/api/examenes/${e2.id}`).set(como('operador')).send({ nivelHallazgo: 'moderado' });
+    expect((await request(app).get(`/api/seguimientos?pacienteId=${trabajadorId}`).set(como('operador'))).body.total).toBe(1);
+  });
+
+  it('se cierra con la aptitud sugerida y queda vigente; luego no se puede modificar', async () => {
+    const ev = await request(app).get(`/api/evaluaciones/${evaluacionId}`).set(como('operador'));
+    expect(ev.body.aptitudSugerida).toBe('apto_con_restricciones');
+    expect((await request(app).post(`/api/evaluaciones/${evaluacionId}/cerrar`).set(como('operador'))
+      .send({ aptitud: 'apto_con_restricciones' })).status).toBe(400); // faltan restricciones
+    const c = await request(app).post(`/api/evaluaciones/${evaluacionId}/cerrar`).set(como('operador'))
+      .send({ aptitud: 'apto_con_restricciones', restricciones: 'Control de presión mensual' });
+    expect(c.status).toBe(200);
+    expect(c.body).toMatchObject({ estado: 'cerrada', vigenteHasta: '2027-11-10' });
+    expect((await request(app).patch(`/api/examenes/${ev.body.examenes[0].id}`).set(como('operador')).send({ nivelHallazgo: 'critico' })).status).toBe(400);
+    const a = await request(app).get(`/api/aptitud?q=Trabajador Bateria&protocoloId=${protocoloId}`).set(como('admin'));
+    expect(a.body.items[0]).toMatchObject({ estado: 'vigente', aptitud: 'apto_con_restricciones', restricciones: 'Control de presión mensual' });
+  });
+
+  it('el gerente ve la aptitud de su empresa, sin diagnósticos, y puede exportarla', async () => {
+    const a = await request(app).get('/api/aptitud?porPagina=200').set(como('gerente1'));
+    expect(a.status).toBe(200);
+    expect(a.body.items.every((f: { empresaId: number }) => f.empresaId === empresaIds[0])).toBe(true);
+    const texto = JSON.stringify(a.body);
+    expect(texto).not.toContain('Hipertensión');
+    expect(texto).not.toMatch(/observaciones|nivelHallazgo|motivo/);
+    expect(a.body.resumen.trabajadores).toBeGreaterThan(50);
+    expect(a.body.resumen.porEstado.vencido + a.body.resumen.porEstado.por_vencer).toBeGreaterThan(0);
+    expect((await request(app).get(`/api/aptitud?empresaId=${empresaIds[1]}`).set(como('gerente1'))).status).toBe(403);
+    expect((await request(app).get('/api/seguimientos').set(como('gerente1'))).status).toBe(403);
+
+    const csv = await request(app).get('/api/aptitud?formato=csv&estado=vencido').set(como('gerente1'));
+    expect(csv.headers['content-type']).toContain('text/csv');
+    expect(csv.text.split('\r\n')[0]).toContain('Vigente hasta');
+    expect(csv.text).toContain('Vencido');
+  });
+
+  it('el dashboard incluye el % de trabajadores habilitados', async () => {
+    const d = await request(app).get('/api/dashboard').set(como('gerente1'));
+    expect(d.body.aptitud.porcentajeHabilitados).toBeGreaterThan(0);
+    expect(d.body.aptitud.porcentajeHabilitados).toBeLessThan(100);
+  });
+
+  it('avisa al gerente por correo de los vencimientos', async () => {
+    const n = await request(app).post('/api/aptitud/notificar').set(como('admin')).send({ empresaId: empresaIds[0] });
+    expect(n.body).toMatchObject({ enviado: true, para: 'gerente.cordillera@example.com' });
+    expect(n.body.cantidad).toBeGreaterThan(0);
+    const correo = bandejaSimulada.at(-1)!;
+    expect(correo.texto).toMatch(/VENCIDO|vence el/);
+    expect(correo.texto).not.toContain('Hallazgo');
+  });
+
+  it('no apto crea un seguimiento de no apto temporal; los seguimientos se cierran con resultado', async () => {
+    const ev = await request(app).post('/api/evaluaciones').set(como('operador'))
+      .send({ pacienteId: trabajadorId, protocoloId, tipo: 'periodica', fecha: '2026-11-12' });
+    for (const e of ev.body.examenes) {
+      await request(app).patch(`/api/examenes/${e.id}`).set(como('operador')).send({ estado: 'completado', resultado: 'no_apto', nivelHallazgo: 'critico' });
+    }
+    await request(app).post(`/api/evaluaciones/${ev.body.id}/cerrar`).set(como('operador'))
+      .send({ aptitud: 'no_apto', restricciones: 'Reevaluar tras tratamiento', fechaReevaluacion: '2026-12-15' });
+    const a = await request(app).get(`/api/aptitud?q=Trabajador Bateria&protocoloId=${protocoloId}`).set(como('admin'));
+    expect(a.body.items[0].estado).toBe('no_apto');
+
+    const s = await request(app).get(`/api/seguimientos?pacienteId=${trabajadorId}&estado=abierto`).set(como('operador'));
+    const temporal = s.body.items.find((x: { tipo: string }) => x.tipo === 'no_apto_temporal');
+    expect(temporal.fechaCompromiso).toBe('2026-12-15');
+    expect((await request(app).patch(`/api/seguimientos/${temporal.id}`).set(como('operador')).send({ cerrar: { resultado: 'Alta médica' } })).status).toBe(200);
+    expect((await request(app).patch(`/api/seguimientos/${temporal.id}`).set(como('operador')).send({ cerrar: { resultado: 'otra vez' } })).status).toBe(400);
+    const resumen = await request(app).get('/api/seguimientos/resumen').set(como('operador'));
+    expect(resumen.body.abiertos).toBeGreaterThan(0);
+  });
+});
+
 describe('contraseñas', () => {
   const ultimoEnlace = () => {
     const c = bandejaSimulada.at(-1)!;

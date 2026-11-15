@@ -16,6 +16,11 @@ function useAncho(): [RefObject<HTMLDivElement | null>, number] {
   return [ref, w];
 }
 
+/** Cada cuántas etiquetas del eje X mostrar para que no se encimen (~52 px por etiqueta). */
+function pasoEtiqueta(cantidad: number, ancho: number) {
+  return Math.max(1, Math.ceil((cantidad * 52) / Math.max(ancho, 1)));
+}
+
 function escalaBonita(max: number, pasos = 4) {
   if (max <= 0) return { tope: pasos, ticks: Array.from({ length: pasos + 1 }, (_, i) => i) };
   const bruto = max / pasos;
@@ -73,7 +78,7 @@ export function BarrasVerticales({ datos, alto = 220, formato = String, nombre }
           return (
             <g key={d.etiqueta}>
               <path d={barraV(cx - bw / 2, y(v), bw, ih + m.t - y(v))} fill="var(--serie-1)" opacity={tip && !activo ? 0.55 : 1} />
-              <text x={cx} y={alto - 8} textAnchor="middle">{d.etiqueta}</text>
+              {i % pasoEtiqueta(datos.length, iw) === 0 && <text x={cx} y={alto - 8} textAnchor="middle">{d.etiqueta}</text>}
               <rect x={cx - banda / 2} y={m.t} width={banda} height={ih} fill="transparent"
                 onMouseEnter={() => setTip({ x: cx, y: y(v), contenido: <><b>{d.etiqueta}</b>{formato(v)} {nombre.toLowerCase()}{d.detalle}</> })} />
             </g>
@@ -119,7 +124,7 @@ export function LineaTemporal({ datos, alto = 220, formato = String, nombre }: {
           const banda = iw / Math.max(datos.length - 1, 1);
           return (
             <g key={d.etiqueta}>
-              <text x={x(i)} y={alto - 8} textAnchor="middle">{d.etiqueta}</text>
+              {i % pasoEtiqueta(datos.length, iw) === 0 && <text x={x(i)} y={alto - 8} textAnchor="middle">{d.etiqueta}</text>}
               <rect x={x(i) - banda / 2} y={m.t} width={banda} height={ih} fill="transparent"
                 onMouseEnter={() => setTip({ x: x(i), y: d.valor === null ? m.t + ih : y(d.valor), contenido: <><b>{d.etiqueta}</b>{d.valor === null ? 'Sin citas' : `${formato(d.valor)} ${nombre.toLowerCase()}`}</> })} />
             </g>

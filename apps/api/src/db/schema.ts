@@ -1,7 +1,10 @@
 import {
   pgTable, pgEnum, serial, integer, text, boolean, timestamp, date, uniqueIndex, index,
 } from 'drizzle-orm/pg-core';
-import { ROLES, TIPOS_EXAMEN, ESTADOS_EXAMEN, RESULTADOS, NIVELES_HALLAZGO, ESTADOS_CITA } from '@naspeclinic/shared';
+import {
+  ROLES, TIPOS_EXAMEN, ESTADOS_EXAMEN, RESULTADOS, NIVELES_HALLAZGO, ESTADOS_CITA,
+  TIPOS_EVALUACION, ESTADOS_EVALUACION, TIPOS_SEGUIMIENTO, ESTADOS_SEGUIMIENTO,
+} from '@naspeclinic/shared';
 
 export const rolEnum = pgEnum('rol', ROLES);
 export const tipoExamenEnum = pgEnum('tipo_examen', TIPOS_EXAMEN);
@@ -9,6 +12,10 @@ export const estadoExamenEnum = pgEnum('estado_examen', ESTADOS_EXAMEN);
 export const resultadoEnum = pgEnum('resultado', RESULTADOS);
 export const nivelHallazgoEnum = pgEnum('nivel_hallazgo', NIVELES_HALLAZGO);
 export const estadoCitaEnum = pgEnum('estado_cita', ESTADOS_CITA);
+export const tipoEvaluacionEnum = pgEnum('tipo_evaluacion', TIPOS_EVALUACION);
+export const estadoEvaluacionEnum = pgEnum('estado_evaluacion', ESTADOS_EVALUACION);
+export const tipoSeguimientoEnum = pgEnum('tipo_seguimiento', TIPOS_SEGUIMIENTO);
+export const estadoSeguimientoEnum = pgEnum('estado_seguimiento', ESTADOS_SEGUIMIENTO);
 
 const creado = () => timestamp('creado_en', { withTimezone: true }).defaultNow().notNull();
 
@@ -62,6 +69,8 @@ export const pacientes = pgTable('pacientes', {
   email: text('email'),
   telefono: text('telefono'),
   cargo: text('cargo'),
+  /** Cargo dentro de la empresa: define qué protocolos (baterías) le corresponden */
+  cargoId: integer('cargo_id').references(() => cargos.id),
   empresaId: integer('empresa_id').notNull().references(() => empresas.id),
   creadoEn: creado(),
 }, (t) => [uniqueIndex('pacientes_rut_hash_idx').on(t.rutHash), index('pacientes_empresa_idx').on(t.empresaId)]);
@@ -70,6 +79,8 @@ export const examenes = pgTable('examenes', {
   id: serial('id').primaryKey(),
   pacienteId: integer('paciente_id').notNull().references(() => pacientes.id),
   empresaId: integer('empresa_id').notNull().references(() => empresas.id),
+  /** Evaluación (batería) a la que pertenece; null = examen suelto */
+  evaluacionId: integer('evaluacion_id').references(() => evaluaciones.id, { onDelete: 'cascade' }),
   sedeId: integer('sede_id').references(() => sedes.id),
   tipo: tipoExamenEnum('tipo').notNull(),
   fecha: date('fecha').notNull(),
@@ -121,3 +132,79 @@ export const auditoria = pgTable('auditoria', {
   ip: text('ip'),
   fecha: timestamp('fecha', { withTimezone: true }).defaultNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Protocolos, cargos y evaluaciones (baterías de exámenes)
+// ---------------------------------------------------------------------------
+
+/** Protocolo de vigilancia: conjunto de exámenes y cada cuánto se repite. */
+export const protocolos = pgTable('protocolos', {
+  id: serial('id').primaryKey(),
+  nombre: text('nombre').notNull().unique(),
+  descripcion: text('descripcion'),
+  /** Meses de vigencia de la aptitud (configurable por la clínica) */
+  vigenciaMeses: integer('vigencia_meses').notNull(),
+  activo: boolean('activo').default(true).notNull(),
+});
+
+/** Exámenes (prestaciones) que componen cada protocolo. */
+export const protocoloExamenes = pgTable('protocolo_examenes', {
+  protocoloId: integer('protocolo_id').notNull().references(() => protocolos.id, { onDelete: 'cascade' }),
+  tipo: tipoExamenEnum('tipo').notNull(),
+}, (t) => [uniqueIndex('protocolo_examenes_pk').on(t.protocoloId, t.tipo)]);
+
+/** Cargos de cada empresa cliente. */
+export const cargos = pgTable('cargos', {
+  id: serial('id').primaryKey(),
+  empresaId: integer('empresa_id').notNull().references(() => empresas.id),
+  nombre: text('nombre').notNull(),
+}, (t) => [uniqueIndex('cargos_empresa_nombre_idx').on(t.empresaId, t.nombre)]);
+
+/** Protocolos que exige cada cargo (según sus riesgos). */
+export const cargoProtocolos = pgTable('cargo_protocolos', {
+  cargoId: integer('cargo_id').notNull().references(() => cargos.id, { onDelete: 'cascade' }),
+  protocoloId: integer('protocolo_id').notNull().references(() => protocolos.id, { onDelete: 'cascade' }),
+}, (t) => [uniqueIndex('cargo_protocolos_pk').on(t.cargoId, t.protocoloId)]);
+
+/** Evaluación ocupacional: una batería de exámenes que termina en una aptitud con vigencia. */
+export const evaluaciones = pgTable('evaluaciones', {
+  id: serial('id').primaryKey(),
+  pacienteId: integer('paciente_id').notNull().references(() => pacientes.id),
+  empresaId: integer('empresa_id').notNull().references(() => empresas.id),
+  protocoloId: integer('protocolo_id').notNull().references(() => protocolos.id),
+  sedeId: integer('sede_id').references(() => sedes.id),
+  tipo: tipoEvaluacionEnum('tipo').notNull(),
+  fecha: date('fecha').notNull(),
+  estado: estadoEvaluacionEnum('estado').default('en_curso').notNull(),
+  aptitud: resultadoEnum('aptitud'),
+  /** Restricciones laborales (visibles para la empresa). No incluye diagnósticos. */
+  restricciones: text('restricciones'),
+  vigenteHasta: date('vigente_hasta'),
+  cerradaPor: integer('cerrada_por').references(() => usuarios.id),
+  cerradaEn: timestamp('cerrada_en', { withTimezone: true }),
+  creadoPor: integer('creado_por').references(() => usuarios.id),
+  creadoEn: creado(),
+}, (t) => [
+  index('evaluaciones_paciente_protocolo_idx').on(t.pacienteId, t.protocoloId, t.fecha),
+  index('evaluaciones_empresa_idx').on(t.empresaId),
+]);
+
+/** Seguimiento de hallazgos: derivaciones, recontroles y no aptos temporales hasta su cierre. */
+export const seguimientos = pgTable('seguimientos', {
+  id: serial('id').primaryKey(),
+  pacienteId: integer('paciente_id').notNull().references(() => pacientes.id),
+  empresaId: integer('empresa_id').notNull().references(() => empresas.id),
+  examenId: integer('examen_id').references(() => examenes.id, { onDelete: 'set null' }),
+  evaluacionId: integer('evaluacion_id').references(() => evaluaciones.id, { onDelete: 'set null' }),
+  tipo: tipoSeguimientoEnum('tipo').notNull(),
+  /** Motivo y especialidad de derivación (dato clínico: cifrado) */
+  motivoCifrado: text('motivo_cifrado'),
+  fechaCompromiso: date('fecha_compromiso'),
+  estado: estadoSeguimientoEnum('estado').default('abierto').notNull(),
+  /** Resultado del cierre (dato clínico: cifrado) */
+  cierreCifrado: text('cierre_cifrado'),
+  creadoPor: integer('creado_por').references(() => usuarios.id),
+  cerradoPor: integer('cerrado_por').references(() => usuarios.id),
+  cerradoEn: timestamp('cerrado_en', { withTimezone: true }),
+  creadoEn: creado(),
+}, (t) => [index('seguimientos_estado_fecha_idx').on(t.estado, t.fechaCompromiso)]);

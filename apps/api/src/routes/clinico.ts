@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { and, asc, count, desc, eq, gte, ilike, lte, type SQL } from 'drizzle-orm';
 import { TIPOS_EXAMEN, ESTADOS_EXAMEN, RESULTADOS, NIVELES_HALLAZGO, ESTADOS_CITA, rutValido, normalizarRut } from '@naspeclinic/shared';
 import type { DB } from '../db';
-import { pacientes, examenes, archivos, citas, empresas, sedes } from '../db/schema';
+import { pacientes, examenes, archivos, citas, empresas, sedes, cargos, evaluaciones, protocolos, seguimientos } from '../db/schema';
+import { abrirPorHallazgo } from '../services/seguimientos';
 import { requiereRol } from '../middleware/auth';
 import { HttpError } from '../lib/errores';
 import { auditar } from '../lib/auditoria';
@@ -31,6 +32,7 @@ const pacienteSchema = z.object({
   email: z.string().email().nullish(),
   telefono: z.string().nullish(),
   cargo: z.string().nullish(),
+  cargoId: z.number().int().positive().nullish(),
   empresaId: z.number().int().positive(),
 });
 
@@ -70,6 +72,15 @@ export function clinicoRouter(db: DB) {
     fileFilter: (_req, f, cb) => (MIMES.includes(f.mimetype) ? cb(null, true) : cb(new HttpError(400, 'Solo se aceptan PDF, JPG o PNG'))),
   });
 
+  /** Si viene cargoId, valida que sea de la empresa y copia su nombre al campo de texto. */
+  async function conCargo<T extends { cargoId?: number | null; empresaId?: number; cargo?: string | null }>(d: T, empresaActual?: number) {
+    if (!d.cargoId) return d;
+    const [c] = await db.select().from(cargos).where(eq(cargos.id, d.cargoId));
+    const empresaId = d.empresaId ?? empresaActual;
+    if (!c || c.empresaId !== empresaId) throw new HttpError(400, 'El cargo no pertenece a la empresa del trabajador');
+    return { ...d, cargo: c.nombre };
+  }
+
   async function pacienteExiste(pacienteId: number) {
     const [p] = await db.select().from(pacientes).where(eq(pacientes.id, pacienteId));
     if (!p) throw new HttpError(404, 'Paciente no encontrado');
@@ -96,15 +107,17 @@ export function clinicoRouter(db: DB) {
 
   r.post('/pacientes', async (req, res) => {
     const { rut, ...datos } = pacienteSchema.parse(req.body);
-    const [p] = await db.insert(pacientes).values({ ...datos, rutHash: hashRut(rut), rutCifrado: cifrar(normalizarRut(rut)) }).returning();
+    const [p] = await db.insert(pacientes).values({ ...(await conCargo(datos)), rutHash: hashRut(rut), rutCifrado: cifrar(normalizarRut(rut)) }).returning();
     await auditar(db, req, 'crear', 'paciente', p.id);
     res.status(201).json(verPaciente(p));
   });
 
   r.patch('/pacientes/:id', async (req, res) => {
     const { rut, ...datos } = pacienteSchema.partial().parse(req.body);
-    const cambios = { ...datos, ...(rut ? { rutHash: hashRut(rut), rutCifrado: cifrar(normalizarRut(rut)) } : {}) };
-    const [p] = await db.update(pacientes).set(cambios).where(eq(pacientes.id, id(req.params.id))).returning();
+    const actual = await pacienteExiste(id(req.params.id));
+    if (datos.empresaId && datos.empresaId !== actual.empresaId && datos.cargoId === undefined) datos.cargoId = null;
+    const cambios = { ...(await conCargo(datos, actual.empresaId)), ...(rut ? { rutHash: hashRut(rut), rutCifrado: cifrar(normalizarRut(rut)) } : {}) };
+    const [p] = await db.update(pacientes).set(cambios).where(eq(pacientes.id, actual.id)).returning();
     if (!p) throw new HttpError(404, 'Paciente no encontrado');
     await auditar(db, req, 'editar', 'paciente', p.id);
     res.json(verPaciente(p));
@@ -117,10 +130,16 @@ export function clinicoRouter(db: DB) {
     const arch = await db.select({ id: archivos.id, examenId: archivos.examenId, nombre: archivos.nombre, mime: archivos.mime, tamano: archivos.tamano })
       .from(archivos).innerJoin(examenes, eq(archivos.examenId, examenes.id)).where(eq(examenes.pacienteId, p.id));
     const cts = await db.select().from(citas).where(eq(citas.pacienteId, p.id)).orderBy(desc(citas.fechaHora));
+    const evs = await db.select({ ev: evaluaciones, protocolo: protocolos.nombre }).from(evaluaciones)
+      .innerJoin(protocolos, eq(evaluaciones.protocoloId, protocolos.id))
+      .where(eq(evaluaciones.pacienteId, p.id)).orderBy(desc(evaluaciones.fecha), desc(evaluaciones.id));
+    const segs = await db.select().from(seguimientos).where(eq(seguimientos.pacienteId, p.id)).orderBy(desc(seguimientos.id));
     await auditar(db, req, 'ver_historial', 'paciente', p.id);
     res.json({
       paciente: verPaciente(p),
+      evaluaciones: evs.map(({ ev, protocolo }) => ({ ...ev, protocolo })),
       examenes: exs.map((e) => ({ ...verExamen(e), archivos: arch.filter((a) => a.examenId === e.id) })),
+      seguimientos: segs.map(({ motivoCifrado, cierreCifrado, ...x }) => ({ ...x, motivo: descifrarOpcional(motivoCifrado), cierre: descifrarOpcional(cierreCifrado) })),
       citas: cts,
     });
   });
@@ -145,7 +164,7 @@ export function clinicoRouter(db: DB) {
     const pag = paginacion(req.query);
     const donde = and(...f);
     const consulta = db.select({
-      id: examenes.id, tipo: examenes.tipo, fecha: examenes.fecha, estado: examenes.estado,
+      id: examenes.id, evaluacionId: examenes.evaluacionId, tipo: examenes.tipo, fecha: examenes.fecha, estado: examenes.estado,
       resultado: examenes.resultado, nivelHallazgo: examenes.nivelHallazgo,
       pacienteId: pacientes.id, paciente: pacientes.nombre, empresaId: empresas.id, empresa: empresas.nombre,
     }).from(examenes)
@@ -162,6 +181,7 @@ export function clinicoRouter(db: DB) {
     const [e] = await db.insert(examenes).values({
       ...datos, empresaId: p.empresaId, observacionesCifradas: cifrarOpcional(observaciones), creadoPor: req.usuario!.id,
     }).returning();
+    await abrirPorHallazgo(db, e, req.usuario!.id);
     await auditar(db, req, 'crear', 'examen', e.id);
     res.status(201).json(verExamen(e));
   });
@@ -169,8 +189,13 @@ export function clinicoRouter(db: DB) {
   r.patch('/examenes/:id', async (req, res) => {
     const { observaciones, pacienteId: _p, ...datos } = examenSchema.partial().parse(req.body);
     const cambios = { ...datos, ...(observaciones !== undefined ? { observacionesCifradas: cifrarOpcional(observaciones) } : {}) };
-    const [e] = await db.update(examenes).set(cambios).where(eq(examenes.id, id(req.params.id))).returning();
-    if (!e) throw new HttpError(404, 'Examen no encontrado');
+    const exId = id(req.params.id);
+    const [previo] = await db.select({ evaluacionId: examenes.evaluacionId, estadoEv: evaluaciones.estado })
+      .from(examenes).leftJoin(evaluaciones, eq(examenes.evaluacionId, evaluaciones.id)).where(eq(examenes.id, exId));
+    if (!previo) throw new HttpError(404, 'Examen no encontrado');
+    if (previo.estadoEv === 'cerrada') throw new HttpError(400, 'La evaluación de este examen ya está cerrada y no se puede modificar');
+    const [e] = await db.update(examenes).set(cambios).where(eq(examenes.id, exId)).returning();
+    await abrirPorHallazgo(db, e, req.usuario!.id);
     await auditar(db, req, 'editar', 'examen', e.id);
     res.json(verExamen(e));
   });

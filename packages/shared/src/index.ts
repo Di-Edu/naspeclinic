@@ -14,6 +14,9 @@ export const TIPO_EXAMEN_LABEL: Record<TipoExamen, string> = {
   geneticos: 'Marcadores genéticos',
 };
 
+/** Nombre del examen dentro de una frase: "Suero vitamina C" → "suero vitamina C". */
+export const examenEnTexto = (t: TipoExamen) => TIPO_EXAMEN_LABEL[t].charAt(0).toLowerCase() + TIPO_EXAMEN_LABEL[t].slice(1);
+
 export const ESTADOS_EXAMEN = ['pendiente', 'en_proceso', 'completado'] as const;
 export type EstadoExamen = (typeof ESTADOS_EXAMEN)[number];
 
@@ -25,6 +28,39 @@ export type NivelHallazgo = (typeof NIVELES_HALLAZGO)[number];
 
 export const ESTADOS_CITA = ['pendiente', 'confirmada', 'cancelada', 'ausente'] as const;
 export type EstadoCita = (typeof ESTADOS_CITA)[number];
+
+export const TIPOS_EVALUACION = ['preocupacional', 'periodica', 'egreso'] as const;
+export type TipoEvaluacion = (typeof TIPOS_EVALUACION)[number];
+export const TIPO_EVALUACION_LABEL: Record<TipoEvaluacion, string> = {
+  preocupacional: 'Preocupacional', periodica: 'Periódica', egreso: 'Egreso',
+};
+
+export const ESTADOS_EVALUACION = ['en_curso', 'cerrada'] as const;
+export type EstadoEvaluacion = (typeof ESTADOS_EVALUACION)[number];
+
+/** Aptitud laboral: es lo único (junto con las restricciones) que ve la empresa. */
+export const APTITUDES = RESULTADOS;
+export const RESULTADO_LABEL: Record<Resultado, string> = {
+  apto: 'Apto', apto_con_restricciones: 'Apto con restricciones', no_apto: 'No apto',
+};
+export type Aptitud = Resultado;
+
+/** Estado de vigencia de un trabajador para un protocolo. */
+export const ESTADOS_VIGENCIA = ['vigente', 'por_vencer', 'vencido', 'no_apto', 'sin_evaluacion'] as const;
+export type EstadoVigencia = (typeof ESTADOS_VIGENCIA)[number];
+export const ESTADO_VIGENCIA_LABEL: Record<EstadoVigencia, string> = {
+  vigente: 'Vigente', por_vencer: 'Por vencer', vencido: 'Vencido', no_apto: 'No apto', sin_evaluacion: 'Sin evaluación',
+};
+/** Días antes del vencimiento en que se considera "por vencer". */
+export const DIAS_POR_VENCER = 30;
+
+export const TIPOS_SEGUIMIENTO = ['derivacion', 'recontrol', 'no_apto_temporal'] as const;
+export type TipoSeguimiento = (typeof TIPOS_SEGUIMIENTO)[number];
+export const TIPO_SEGUIMIENTO_LABEL: Record<TipoSeguimiento, string> = {
+  derivacion: 'Derivación a especialista', recontrol: 'Recontrol', no_apto_temporal: 'No apto temporal',
+};
+export const ESTADOS_SEGUIMIENTO = ['abierto', 'cerrado'] as const;
+export type EstadoSeguimiento = (typeof ESTADOS_SEGUIMIENTO)[number];
 
 /** Política de contraseñas: devuelve el problema o null si es válida. */
 export function problemaPassword(p: string): string | null {

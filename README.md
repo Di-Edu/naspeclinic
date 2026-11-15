@@ -18,6 +18,9 @@ genéticos), agenda de citas por sede y reportes ejecutivos para los gerentes de
 | API: dashboard KPI (cobertura, ausentismo, hallazgos, ROI, tendencias) | ✅ |
 | API: reporte gerencial en PDF y envío por email | ✅ |
 | API: auditoría de accesos a datos clínicos | ✅ |
+| Protocolos por cargo: cada evaluación genera su batería de exámenes y termina en una aptitud con vigencia | ✅ |
+| Aptitud por trabajador para la empresa (sin diagnósticos), vencimientos, aviso por correo y exportación a Excel | ✅ |
+| Seguimiento de hallazgos: derivaciones, recontroles y no aptos temporales hasta su cierre | ✅ |
 | Web: login, dashboard KPI, pacientes, exámenes, agenda, reporte y usuarios | ✅ (demo; se adapta al diseño del prototipo del cliente) |
 | App móvil (React Native / Expo)          | ⏳ |
 | Almacenamiento S3 y notificaciones SMS   | ⏳ |

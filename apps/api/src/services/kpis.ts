@@ -1,6 +1,7 @@
 import { sql, type SQL } from 'drizzle-orm';
 import { TIPO_EXAMEN_LABEL, type TipoExamen } from '@naspeclinic/shared';
 import type { DB } from '../db';
+import { listarAptitud, resumirAptitud } from './aptitud';
 
 export interface FiltroKpi {
   empresaId: number | null; // null = todas las empresas (solo admin)
@@ -114,9 +115,13 @@ export async function calcularKpis(db: DB, f: FiltroKpi) {
     },
   };
 
+  // Aptitud vigente: foto al día de hoy (no depende del rango de fechas)
+  const aptitud = resumirAptitud(await listarAptitud(db, f.empresaId));
+
   return {
     filtro: f,
     kpis,
+    aptitud,
     porEspecialidad: porEspecialidad.map((p) => ({
       tipo: p.tipo, etiqueta: TIPO_EXAMEN_LABEL[p.tipo], total: n(p.total), hallazgos: n(p.hallazgos),
     })),

@@ -10,6 +10,7 @@ import { authRouter } from './routes/auth';
 import { adminRouter } from './routes/admin';
 import { clinicoRouter } from './routes/clinico';
 import { reportesRouter } from './routes/reportes';
+import { ocupacionalRouter } from './routes/ocupacional';
 
 /**
  * Límites del login. En una faena muchos trabajadores salen a internet por la misma IP,
@@ -63,6 +64,7 @@ export function crearApp(db: DB) {
   app.use('/api', adminRouter(db));
   app.use('/api', clinicoRouter(db));
   app.use('/api', reportesRouter(db));
+  app.use('/api', ocupacionalRouter(db));
 
   app.use('/api', (_req, res) => { res.status(404).json({ error: 'Ruta no encontrada' }); });
   app.use(manejadorErrores);

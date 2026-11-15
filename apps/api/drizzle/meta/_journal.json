@@ -15,6 +15,13 @@
       "when": 1794757887739,
       "tag": "0001_recuperacion_password",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794759969963,
+      "tag": "0002_protocolos_evaluaciones",
+      "breakpoints": true
     }
   ]
 }
