@@ -1,5 +1,23 @@
 # Plan de ejecución (7 semanas)
 
+## Avance al 15-11-2026 (demo previa a la contratación)
+
+| Área | Estado |
+|---|---|
+| Base técnica: API, base de datos, roles, cifrado, auditoría, tests (32) | ✅ |
+| Seguridad: recuperación de contraseña, cambio obligatorio, límites, CSP, cierre de sesión | ✅ |
+| Gestión de exámenes, archivos e historial | ✅ |
+| Agenda de citas por sede | ✅ (falta notificación al paciente) |
+| Dashboard KPI y reporte gerencial PDF | ✅ (falta logo del cliente) |
+| Protocolos por cargo, evaluaciones con aptitud y vigencia, vencimientos, seguimientos | ✅ (fuera del alcance original) |
+| Web en React | ✅ demo (se adapta al prototipo del cliente) |
+| Producción: Vercel, Railway, S3, correo real, Cloudflare, respaldos | ⏳ |
+| Importador masivo desde Excel y optimizaciones para decenas de miles de trabajadores | ⏳ |
+| App móvil iOS/Android | ⏳ |
+| Manual de uso | ⏳ |
+
+## Plan original
+
 | Semana | Entregable                                                                                      | Hito de pago |
 |--------|--------------------------------------------------------------------------------------------------|--------------|
 | 0      | Firma, entrega del prototipo y accesos                                                           | 30 % inicio  |

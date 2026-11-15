@@ -44,19 +44,26 @@ y reportes ejecutivos para empresas mineras clientes.
 
 ## 2. Roles y permisos
 
-| Recurso / acción                     | Admin Naspeclinic | Operador | Gerente empresa |
-|--------------------------------------|:-----------------:|:--------:|:---------------:|
-| Empresas, sedes, usuarios            | CRUD              | —        | —               |
-| Pacientes                            | CRUD              | CRUD     | —               |
-| Exámenes y archivos                  | CRUD              | CRUD     | —               |
-| Citas                                | CRUD              | CRUD     | —               |
-| Dashboard KPI                        | todas             | —        | solo su empresa |
-| Reporte gerencial / PDF              | todas             | —        | solo su empresa |
-| Auditoría                            | lectura           | —        | —               |
+| Recurso / acción                                   | Admin Naspeclinic | Operador      | Gerente empresa        |
+|----------------------------------------------------|:-----------------:|:-------------:|:----------------------:|
+| Empresas (crear/editar), dotación, usuarios        | sí                | ver empresas  | —                      |
+| Restablecer contraseñas de usuarios                | sí                | —             | —                      |
+| Protocolos y cargos (configuración clínica)        | sí                | ver           | —                      |
+| Pacientes, exámenes, archivos, citas               | sí                | sí            | —                      |
+| Evaluaciones (crear, registrar resultados, cerrar) | sí                | sí            | —                      |
+| Seguimientos de hallazgos                          | sí                | sí            | —                      |
+| Aptitud y vencimientos                             | todas             | todas         | solo su empresa        |
+| Avisar vencimientos por correo a la empresa        | sí                | —             | —                      |
+| Dashboard KPI y reporte gerencial / PDF            | todas             | —             | solo su empresa        |
+| Enviar reporte por correo al gerente               | sí                | —             | —                      |
+| Cambiar su propia contraseña / cerrar sesión       | sí                | sí            | sí                     |
 
-- El rol y la `empresaId` van dentro del JWT. Para el gerente, la API **ignora** cualquier
-  `empresaId` que venga en la URL y fuerza la suya (no depende del frontend).
-- El gerente no ve datos clínicos individuales: solo agregados (KPIs, conteos, tendencias).
+- El token solo lleva el id del usuario; rol y empresa se leen de la base en cada petición.
+  Para el gerente, la API **ignora** cualquier `empresaId` que venga en la URL y fuerza la suya.
+- El gerente nunca ve datos clínicos: solo agregados (KPIs, tendencias) y, por trabajador,
+  aptitud, restricciones laborales y vigencia.
+- La auditoría se registra en la tabla `auditoria` (aún sin pantalla de consulta).
+- En una clínica real, el cierre de evaluaciones debería quedar en un rol **médico** (pendiente).
 
 ## 3. Modelo de datos
 
@@ -130,36 +137,72 @@ seguimientos (derivación / recontrol / no apto temporal) → examen o evaluaci�
 Los datos de salud son **datos sensibles**. Medidas:
 
 1. **HTTPS obligatorio** (Vercel y Railway lo entregan; la API rechaza HTTP en producción).
-2. **Cifrado en reposo a nivel de campo** con AES-256-GCM: RUT y observaciones clínicas.
-   El RUT además se guarda como HMAC-SHA256 (`rut_hash`) para poder buscarlo sin descifrarlo.
-   Las llaves viven en variables de entorno, nunca en el repositorio.
-3. **Archivos clínicos** en bucket S3 privado; se descargan solo con URL firmada de 5 minutos,
-   emitida tras validar permisos.
-4. **Contraseñas** con bcrypt; JWT de corta duración (8 h) y bloqueo tras intentos fallidos.
-5. **Mínimo privilegio:** el gerente solo ve agregados de su empresa.
-6. **Auditoría:** se registra quién ve, crea, modifica o descarga datos clínicos.
-7. Cabeceras de seguridad (helmet), CORS restringido a los dominios oficiales, rate limiting.
+2. **Cifrado en reposo a nivel de campo** con AES-256-GCM: RUT, observaciones clínicas y
+   motivos/cierres de seguimientos. El RUT además se guarda como HMAC-SHA256 (`rut_hash`) para
+   buscarlo sin descifrarlo. Las llaves viven en variables de entorno, nunca en el repositorio.
+3. **Archivos clínicos:** se descargan solo con sesión y permisos, quedando auditados. Hoy se
+   guardan en disco (desarrollo); en producción irán a un bucket S3 privado con URL firmada de
+   5 minutos (pendiente).
+4. **Contraseñas y sesiones:** bcrypt, sesiones de 8 h revalidadas contra la base en cada
+   petición, bloqueo tras intentos fallidos, recuperación por enlace y cierre de sesión que
+   revoca el token.
+5. **Mínimo privilegio:** el gerente solo ve agregados y aptitud de su empresa.
+6. **Auditoría:** se registra quién ve, crea, modifica, descarga o exporta datos clínicos.
+7. **Contra abuso:** límites por usuario y por IP, tiempos máximos, validación del contenido de
+   archivos, cabeceras de seguridad y CSP.
 8. Respaldos diarios de la base (Railway) y política de retención acordada con el cliente.
+
+El detalle y el checklist de producción están en [`SEGURIDAD.md`](SEGURIDAD.md).
 
 La Ley 21.719 (nueva ley de protección de datos personales) entra en vigencia en diciembre de
 2026; el diseño ya cumple sus principios de seguridad, minimización y trazabilidad.
 
 ## 6. Endpoints principales
 
+Las listas aceptan `pagina` y `porPagina` (máx. 200) y responden `{ items, total, pagina, porPagina }`.
+
 ```
-POST   /api/auth/login                  GET /api/auth/me
-GET    /api/empresas         (admin)    POST/PATCH/DELETE ...
-GET    /api/usuarios         (admin)    POST/PATCH ...
-GET    /api/pacientes?q=&empresaId=     POST/PATCH  GET /api/pacientes/:id/historial
-GET    /api/examenes?empresaId=&tipo=&estado=&desde=&hasta=
-POST   /api/examenes                    PATCH /api/examenes/:id
-POST   /api/examenes/:id/archivos (multipart, PDF/JPG/PNG, máx. 10 MB)
-GET    /api/archivos/:id/descarga       → URL firmada
-GET    /api/citas?sedeId=&desde=&hasta=&estado=   POST / PATCH
-GET    /api/dashboard?empresaId=&desde=&hasta=
-GET    /api/reportes/:empresaId?periodo=YYYY-MM          (JSON)
-GET    /api/reportes/:empresaId/pdf?periodo=YYYY-MM      (PDF con logo)
-POST   /api/reportes/:empresaId/enviar  → email al gerente con el PDF adjunto
+# Sesión y contraseñas
+POST  /api/auth/login                     GET  /api/auth/me
+POST  /api/auth/logout                    (revoca el token en el servidor)
+POST  /api/auth/cambiar-password          { actual, nueva }  → token nuevo
+POST  /api/auth/olvide                    { email }          → enlace por correo
+POST  /api/auth/restablecer               { token, password }
+
+# Administración
+GET   /api/sedes                          GET/POST /api/empresas    PATCH /api/empresas/:id
+PUT   /api/empresas/:id/dotacion/:periodo { trabajadores }
+GET   /api/usuarios                       POST /api/usuarios        PATCH /api/usuarios/:id
+POST  /api/usuarios/:id/restablecer       { modo: "enlace" | "temporal" }
+
+# Configuración clínica
+GET   /api/protocolos                     POST /api/protocolos      PATCH /api/protocolos/:id
+GET   /api/cargos?empresaId=              POST /api/cargos          PATCH /api/cargos/:id
+
+# Clínico
+GET   /api/pacientes?q=&empresaId=        POST /api/pacientes       PATCH /api/pacientes/:id
+GET   /api/pacientes/:id/historial        (evaluaciones, exámenes, seguimientos, citas)
+GET   /api/examenes?empresaId=&tipo=&estado=&desde=&hasta=
+POST  /api/examenes                       PATCH /api/examenes/:id
+POST  /api/examenes/:id/archivos          (multipart; PDF/JPG/PNG verificados; máx. 10 MB)
+GET   /api/archivos/:id/descarga
+GET   /api/citas?sedeId=&empresaId=&estado=&desde=&hasta=    POST /api/citas   PATCH /api/citas/:id
+
+# Evaluaciones, aptitud y seguimientos
+POST  /api/evaluaciones                   { pacienteId, protocoloId, tipo, fecha, sedeId }
+GET   /api/evaluaciones/:id               (batería, aptitud sugerida, vigencia sugerida)
+POST  /api/evaluaciones/:id/cerrar        { aptitud, restricciones, vigenteHasta, fechaReevaluacion }
+GET   /api/aptitud?empresaId=&estado=&protocoloId=&q=&formato=json|csv
+POST  /api/aptitud/notificar              { empresaId }  → correo al gerente con vencimientos
+GET   /api/seguimientos?estado=&vencidos=1&empresaId=&pacienteId=
+POST  /api/seguimientos                   PATCH /api/seguimientos/:id   { fechaCompromiso | cerrar }
+GET   /api/seguimientos/resumen
+
+# Gerencia
+GET   /api/dashboard?empresaId=&desde=&hasta=           (por defecto, últimos 12 meses)
+GET   /api/reportes/:empresaId?periodo=AAAA-MM          (JSON)
+GET   /api/reportes/:empresaId/pdf?periodo=AAAA-MM      (PDF)
+POST  /api/reportes/:empresaId/enviar                   (correo al gerente con el PDF)
 ```
 
 ## 7. App móvil (propuesta de alcance)
