@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+# Propuesta comercial: privada, no va al repositorio del cliente
+propuesta/
+# Datos locales de desarrollo
+apps/api/.data/
+apps/api/uploads/
+.expo/
