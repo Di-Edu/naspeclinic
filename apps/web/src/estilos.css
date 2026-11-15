@@ -205,5 +205,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .cita select { border: 1px solid var(--borde); border-radius: 7px; padding: 5px 8px; background: var(--superficie); }
 @media (max-width: 600px) { .cita { grid-template-columns: 52px 1fr; } .cita select { grid-column: 1 / -1; } }
 
+.paginacion { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; font-size: 0.88rem; color: var(--texto-2); border-top: 1px solid var(--borde); }
 .cargando { color: var(--texto-3); padding: 24px 0; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }

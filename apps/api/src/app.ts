@@ -1,7 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import type { DB } from './db';
 import { config } from './config';
 import { requiereAuth } from './middleware/auth';
@@ -10,6 +10,29 @@ import { authRouter } from './routes/auth';
 import { adminRouter } from './routes/admin';
 import { clinicoRouter } from './routes/clinico';
 import { reportesRouter } from './routes/reportes';
+
+/**
+ * Límites del login. En una faena muchos trabajadores salen a internet por la misma IP,
+ * así que el límite fuerte va por correo (solo cuenta intentos fallidos) y el límite por IP
+ * es amplio, solo para frenar ataques masivos. Además, la cuenta se bloquea 15 min tras
+ * 5 contraseñas incorrectas (routes/auth.ts).
+ */
+function limitesLogin() {
+  const ventana = 15 * 60_000;
+  const comun = { windowMs: ventana, standardHeaders: true, legacyHeaders: false, message: { error: 'Demasiados intentos. Espere unos minutos e intente de nuevo.' } } as const;
+  const porIp = rateLimit({ ...comun, limit: 600 });
+  const porCorreo = rateLimit({
+    ...comun,
+    limit: 10,
+    skipSuccessfulRequests: true,
+    keyGenerator: (req) => {
+      const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+      return email ? `correo:${email}` : `ip:${ipKeyGenerator(req.ip ?? '')}`;
+    },
+    skip: (req) => req.method !== 'POST' || !req.path.startsWith('/login'),
+  });
+  return [porIp, porCorreo];
+}
 
 export function crearApp(db: DB) {
   const app = express();
@@ -25,7 +48,7 @@ export function crearApp(db: DB) {
 
   app.get('/api/salud', (_req, res) => { res.json({ ok: true }); });
 
-  app.use('/api/auth', rateLimit({ windowMs: 15 * 60_000, limit: 50, standardHeaders: true, legacyHeaders: false }), authRouter(db));
+  app.use('/api/auth', ...limitesLogin(), authRouter(db));
   app.use('/api', requiereAuth);
   app.use('/api', adminRouter(db));
   app.use('/api', clinicoRouter(db));

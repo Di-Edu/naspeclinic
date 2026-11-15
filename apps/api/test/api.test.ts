@@ -81,9 +81,9 @@ describe('pacientes y exámenes', () => {
 
   it('busca por RUT (índice ciego) y por nombre', async () => {
     const porRut = await request(app).get('/api/pacientes?q=11.111.111-1').set(como('operador'));
-    expect(porRut.body.map((p: { id: number }) => p.id)).toEqual([pacienteId]);
+    expect(porRut.body.items.map((p: { id: number }) => p.id)).toEqual([pacienteId]);
     const porNombre = await request(app).get('/api/pacientes?q=paciente prueba').set(como('operador'));
-    expect(porNombre.body[0].id).toBe(pacienteId);
+    expect(porNombre.body.items[0].id).toBe(pacienteId);
   });
 
   it('crea examen con observaciones cifradas y adjunta un PDF', async () => {
@@ -110,7 +110,42 @@ describe('pacientes y exámenes', () => {
   it('filtra exámenes por empresa y tipo', async () => {
     const r = await request(app).get(`/api/examenes?empresaId=${empresaIds[0]}&tipo=cardiologia`).set(como('admin'));
     expect(r.status).toBe(200);
-    expect(r.body.every((e: { tipo: string; empresaId: number }) => e.tipo === 'cardiologia' && e.empresaId === empresaIds[0])).toBe(true);
+    expect(r.body.items.every((e: { tipo: string; empresaId: number }) => e.tipo === 'cardiologia' && e.empresaId === empresaIds[0])).toBe(true);
+  });
+
+  it('pagina pacientes y exámenes sin repetir ni perder registros', async () => {
+    const p1 = await request(app).get('/api/pacientes?porPagina=50&pagina=1').set(como('operador'));
+    expect(p1.body.items).toHaveLength(50);
+    expect(p1.body.total).toBeGreaterThan(100);
+    const paginas = Math.ceil(p1.body.total / 50);
+    const ids = new Set<number>();
+    for (let i = 1; i <= paginas; i++) {
+      const r = await request(app).get(`/api/pacientes?porPagina=50&pagina=${i}`).set(como('operador'));
+      r.body.items.forEach((p: { id: number }) => ids.add(p.id));
+    }
+    expect(ids.size).toBe(p1.body.total);
+
+    const ex = await request(app).get('/api/examenes?porPagina=200&pagina=2').set(como('admin'));
+    expect(ex.body.pagina).toBe(2);
+    expect(ex.body.items.length).toBe(Math.min(200, ex.body.total - 200));
+    expect((await request(app).get('/api/examenes?porPagina=5000').set(como('admin'))).status).toBe(400);
+  });
+});
+
+describe('límites de inicio de sesión', () => {
+  it('60 trabajadores desde la misma red pueden entrar sin bloquearse', async () => {
+    for (let i = 0; i < 60; i++) {
+      const r = await request(app).post('/api/auth/login').send({ email: 'operador@example.com', password: PASSWORD_DEMO });
+      expect(r.status).toBe(200);
+    }
+  });
+
+  it('frena los intentos repetidos contra un mismo correo', async () => {
+    const intento = () => request(app).post('/api/auth/login').send({ email: 'no-existe@example.com', password: 'x' });
+    for (let i = 0; i < 10; i++) expect((await intento()).status).toBe(401);
+    expect((await intento()).status).toBe(429);
+    // otro correo desde la misma IP sigue funcionando
+    expect((await request(app).post('/api/auth/login').send({ email: 'admin@example.com', password: PASSWORD_DEMO })).status).toBe(200);
   });
 });
 

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
-import { and, asc, desc, eq, gte, ilike, lte, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, ilike, lte, type SQL } from 'drizzle-orm';
 import { TIPOS_EXAMEN, ESTADOS_EXAMEN, RESULTADOS, NIVELES_HALLAZGO, ESTADOS_CITA, rutValido, normalizarRut } from '@naspeclinic/shared';
 import type { DB } from '../db';
 import { pacientes, examenes, archivos, citas, empresas, sedes } from '../db/schema';
@@ -15,6 +15,15 @@ import { config } from '../config';
 const id = (v: string | string[]) => z.coerce.number().int().positive().parse(v);
 const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato AAAA-MM-DD');
 const MIMES = ['application/pdf', 'image/jpeg', 'image/png'];
+
+/** ?pagina=1&porPagina=50 (máximo 200 por página) */
+function paginacion(query: unknown) {
+  const { pagina, porPagina } = z.object({
+    pagina: z.coerce.number().int().min(1).default(1),
+    porPagina: z.coerce.number().int().min(1).max(200).default(50),
+  }).parse(query);
+  return { pagina, porPagina, desde: (pagina - 1) * porPagina };
+}
 
 const pacienteSchema = z.object({
   rut: z.string().refine(rutValido, 'RUT inválido'),
@@ -70,14 +79,19 @@ export function clinicoRouter(db: DB) {
   // ---------- Pacientes ----------
   r.get('/pacientes', async (req, res) => {
     const q = z.object({ q: z.string().optional(), empresaId: z.coerce.number().optional() }).parse(req.query);
+    const pag = paginacion(req.query);
     const filtros: SQL[] = [];
     if (q.empresaId) filtros.push(eq(pacientes.empresaId, q.empresaId));
     if (q.q) {
       // Si parece RUT se busca exacto por índice ciego; si no, por nombre
       filtros.push(rutValido(q.q) ? eq(pacientes.rutHash, hashRut(q.q)) : ilike(pacientes.nombre, `%${q.q}%`));
     }
-    const filas = await db.select().from(pacientes).where(and(...filtros)).orderBy(asc(pacientes.nombre)).limit(200);
-    res.json(filas.map(verPaciente));
+    const donde = and(...filtros);
+    const [filas, [{ total }]] = await Promise.all([
+      db.select().from(pacientes).where(donde).orderBy(asc(pacientes.nombre), asc(pacientes.id)).limit(pag.porPagina).offset(pag.desde),
+      db.select({ total: count() }).from(pacientes).where(donde),
+    ]);
+    res.json({ items: filas.map(verPaciente), total, pagina: pag.pagina, porPagina: pag.porPagina });
   });
 
   r.post('/pacientes', async (req, res) => {
@@ -128,15 +142,18 @@ export function clinicoRouter(db: DB) {
     if (q.estado) f.push(eq(examenes.estado, q.estado));
     if (q.desde) f.push(gte(examenes.fecha, q.desde));
     if (q.hasta) f.push(lte(examenes.fecha, q.hasta));
-    const filas = await db.select({
+    const pag = paginacion(req.query);
+    const donde = and(...f);
+    const consulta = db.select({
       id: examenes.id, tipo: examenes.tipo, fecha: examenes.fecha, estado: examenes.estado,
       resultado: examenes.resultado, nivelHallazgo: examenes.nivelHallazgo,
       pacienteId: pacientes.id, paciente: pacientes.nombre, empresaId: empresas.id, empresa: empresas.nombre,
     }).from(examenes)
       .innerJoin(pacientes, eq(examenes.pacienteId, pacientes.id))
       .innerJoin(empresas, eq(examenes.empresaId, empresas.id))
-      .where(and(...f)).orderBy(desc(examenes.fecha)).limit(500);
-    res.json(filas);
+      .where(donde).orderBy(desc(examenes.fecha), desc(examenes.id)).limit(pag.porPagina).offset(pag.desde);
+    const [filas, [{ total }]] = await Promise.all([consulta, db.select({ total: count() }).from(examenes).where(donde)]);
+    res.json({ items: filas, total, pagina: pag.pagina, porPagina: pag.porPagina });
   });
 
   r.post('/examenes', async (req, res) => {

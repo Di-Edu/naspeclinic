@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { rutValido } from '@naspeclinic/shared';
 import { api, qs } from '../api';
 import type { Paciente } from '../tipos';
-import { Encabezado, Modal, mensajeError, useApi, useEmpresas } from '../util';
+import { Encabezado, Modal, Paginacion, mensajeError, useApi, useEmpresas, type Pagina } from '../util';
 import { formatearRut } from '../formato';
 
 export function Pacientes() {
@@ -13,9 +13,12 @@ export function Pacientes() {
   const [qDebounce, setQDebounce] = useState('');
   const [empresaId, setEmpresaId] = useState('');
   const [nuevo, setNuevo] = useState(false);
+  const [pagina, setPagina] = useState(1);
 
   useEffect(() => { const t = setTimeout(() => setQDebounce(q.trim()), 250); return () => clearTimeout(t); }, [q]);
-  const { datos, error, recargar } = useApi<Paciente[]>(`/pacientes${qs({ q: qDebounce, empresaId })}`);
+  useEffect(() => setPagina(1), [qDebounce, empresaId]);
+  const { datos: resp, error, recargar } = useApi<Pagina<Paciente>>(`/pacientes${qs({ q: qDebounce, empresaId, pagina, porPagina: 50 })}`);
+  const datos = resp?.items;
   const empresa = (id: number) => empresas.find((e) => e.id === id)?.nombre ?? '';
 
   return (
@@ -56,8 +59,8 @@ export function Pacientes() {
             </tbody>
           </table>
         </div>
+        <Paginacion datos={resp} onPagina={setPagina} />
       </div>
-      {datos?.length === 200 && <p className="sub" style={{ color: 'var(--texto-3)' }}>Se muestran los primeros 200. Refine la búsqueda.</p>}
       {nuevo && <FormPaciente onCerrar={() => setNuevo(false)} onGuardado={(p) => { setNuevo(false); recargar(); navegar(`/pacientes/${p.id}`); }} />}
     </>
   );

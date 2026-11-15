@@ -58,6 +58,26 @@ export function Encabezado({ titulo, sub, children }: { titulo: string; sub?: Re
   );
 }
 
+export interface Pagina<T> { items: T[]; total: number; pagina: number; porPagina: number }
+
+export function Paginacion({ datos, onPagina }: { datos: Pagina<unknown> | null; onPagina(p: number): void }) {
+  if (!datos || datos.total <= datos.porPagina) return null;
+  const { pagina, porPagina, total } = datos;
+  const ultima = Math.ceil(total / porPagina);
+  const desde = (pagina - 1) * porPagina + 1;
+  const hasta = Math.min(pagina * porPagina, total);
+  return (
+    <nav className="paginacion" aria-label="Paginación">
+      <span>Mostrando {desde.toLocaleString('es-CL')}–{hasta.toLocaleString('es-CL')} de {total.toLocaleString('es-CL')}</span>
+      <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <button className="btn chico" disabled={pagina <= 1} onClick={() => onPagina(pagina - 1)}>‹ Anterior</button>
+        <span>Página {pagina} de {ultima}</span>
+        <button className="btn chico" disabled={pagina >= ultima} onClick={() => onPagina(pagina + 1)}>Siguiente ›</button>
+      </span>
+    </nav>
+  );
+}
+
 export function ChipNivel({ nivel }: { nivel: 'ninguno' | 'moderado' | 'critico' }) {
   if (nivel === 'ninguno') return <span className="chip bueno"><span className="punto" />Sin hallazgos</span>;
   return (

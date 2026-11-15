@@ -10,7 +10,7 @@ export function SelectorPaciente({ valor, onCambio }: { valor: Paciente | null; 
 
   useEffect(() => {
     if (q.trim().length < 2) { setRes([]); return; }
-    const t = setTimeout(() => api.get<Paciente[]>(`/pacientes${qs({ q: q.trim() })}`).then((r) => setRes(r.slice(0, 8))).catch(() => setRes([])), 250);
+    const t = setTimeout(() => api.get<{ items: Paciente[] }>(`/pacientes${qs({ q: q.trim(), porPagina: 8 })}`).then((r) => setRes(r.items)).catch(() => setRes([])), 250);
     return () => clearTimeout(t);
   }, [q]);
 

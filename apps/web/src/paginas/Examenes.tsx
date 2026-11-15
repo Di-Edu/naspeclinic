@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { TIPOS_EXAMEN, TIPO_EXAMEN_LABEL, ESTADOS_EXAMEN, RESULTADOS, NIVELES_HALLAZGO } from '@naspeclinic/shared';
 import { api, qs } from '../api';
 import type { ExamenFila, Paciente } from '../tipos';
-import { ChipNivel, Encabezado, Modal, mensajeError, useApi, useEmpresas, useSedes } from '../util';
+import { ChipNivel, Encabezado, Modal, Paginacion, mensajeError, useApi, useEmpresas, useSedes, type Pagina } from '../util';
 import { ESTADO_EXAMEN_LABEL, NIVEL_LABEL, RESULTADO_LABEL, fecha, isoLocal } from '../formato';
 import { SelectorPaciente } from '../componentes/SelectorPaciente';
 
@@ -12,8 +12,10 @@ export function Examenes() {
   const empresas = useEmpresas();
   const [f, setF] = useState({ empresaId: '', tipo: '', estado: '', desde: '', hasta: '' });
   const [nuevo, setNuevo] = useState(false);
-  const { datos, error, recargar } = useApi<ExamenFila[]>(`/examenes${qs(f)}`);
-  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  const [pagina, setPagina] = useState(1);
+  const { datos: resp, error, recargar } = useApi<Pagina<ExamenFila>>(`/examenes${qs({ ...f, pagina, porPagina: 50 })}`);
+  const datos = resp?.items;
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => { setF({ ...f, [k]: e.target.value }); setPagina(1); };
 
   return (
     <>
@@ -64,6 +66,7 @@ export function Examenes() {
             </tbody>
           </table>
         </div>
+        <Paginacion datos={resp} onPagina={setPagina} />
       </div>
       {nuevo && <FormExamen onCerrar={() => setNuevo(false)} onGuardado={() => { setNuevo(false); recargar(); }} />}
     </>
